@@ -1,7 +1,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Play, Stop } from "lucide-react";
+import { Play, StopCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const ScreenRecorder = () => {
@@ -24,7 +24,6 @@ const ScreenRecorder = () => {
       // Get screen capture stream
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: { 
-          cursor: "always",
           displaySurface: "monitor",
         },
         audio: true,
@@ -149,7 +148,7 @@ const ScreenRecorder = () => {
           onClick={stopRecording}
           disabled={!recording}
         >
-          <Stop className="mr-2 h-5 w-5" /> Stop Recording
+          <StopCircle className="mr-2 h-5 w-5" /> Stop Recording
         </Button>
       </div>
       
