@@ -1,35 +1,45 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, StopCircle, Download } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Monitor, Video, Settings, History, Download, Maximize, Minimize } from "lucide-react";
 import { toast } from "sonner";
 
-type VideoFormat = 'webm' | 'mp4' | 'wav';
+import RecordingControls from "./RecordingControls";
+import FormatSettings, { formatOptions } from "./FormatSettings";
+import RecordingHistory from "./RecordingHistory";
 
-interface FormatOption {
-  value: VideoFormat;
-  label: string;
-  mimeType: string;
-  extension: string;
+interface Recording {
+  id: string;
+  name: string;
+  url: string;
+  format: string;
+  size: string;
+  duration: string;
+  timestamp: Date;
 }
-
-const formatOptions: FormatOption[] = [
-  { value: 'webm', label: 'WebM Video', mimeType: 'video/webm; codecs=vp9', extension: 'webm' },
-  { value: 'mp4', label: 'MP4 Video', mimeType: 'video/mp4', extension: 'mp4' },
-  { value: 'wav', label: 'WAV Audio Only', mimeType: 'audio/wav', extension: 'wav' },
-];
 
 const ScreenRecorder = () => {
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
-  const [selectedFormat, setSelectedFormat] = useState<VideoFormat>('webm');
+  const [selectedFormat, setSelectedFormat] = useState('webm-vp9');
+  const [includeAudio, setIncludeAudio] = useState(true);
+  const [quality, setQuality] = useState('high');
+  const [webcamEnabled, setWebcamEnabled] = useState(false);
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  const [fullscreenPreview, setFullscreenPreview] = useState(false);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [activeTab, setActiveTab] = useState('record');
   
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const recordedVideoRef = useRef<HTMLVideoElement>(null);
+  const webcamVideoRef = useRef<HTMLVideoElement>(null);
+  const recordingChunks = useRef<Blob[]>([]);
 
   // Check browser compatibility
   useEffect(() => {
@@ -44,29 +54,71 @@ const ScreenRecorder = () => {
       if (recordedVideoUrl) {
         URL.revokeObjectURL(recordedVideoUrl);
       }
+      recordings.forEach(recording => {
+        URL.revokeObjectURL(recording.url);
+      });
     };
-  }, [recordedVideoUrl]);
+  }, [recordedVideoUrl, recordings]);
 
   const getSelectedFormatOption = () => {
     return formatOptions.find(option => option.value === selectedFormat) || formatOptions[0];
   };
 
+  const startWebcam = async () => {
+    try {
+      const webcamStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 320, height: 240 },
+        audio: false
+      });
+      setWebcamStream(webcamStream);
+      if (webcamVideoRef.current) {
+        webcamVideoRef.current.srcObject = webcamStream;
+        webcamVideoRef.current.play();
+      }
+    } catch (err) {
+      console.error("Error accessing webcam:", err);
+      toast.error("Failed to access webcam");
+      setWebcamEnabled(false);
+    }
+  };
+
+  const stopWebcam = () => {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(track => track.stop());
+      setWebcamStream(null);
+    }
+    if (webcamVideoRef.current) {
+      webcamVideoRef.current.srcObject = null;
+    }
+  };
+
+  useEffect(() => {
+    if (webcamEnabled) {
+      startWebcam();
+    } else {
+      stopWebcam();
+    }
+  }, [webcamEnabled]);
+
   const startRecording = async () => {
     try {
       const formatOption = getSelectedFormatOption();
+      const isAudioOnly = formatOption.value.includes('wav') || 
+                         formatOption.value.includes('mp3') || 
+                         formatOption.value.includes('ogg');
       
       // Get screen capture stream
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: selectedFormat !== 'wav' ? { 
+        video: !isAudioOnly ? { 
           displaySurface: "monitor",
         } : false,
-        audio: true,
+        audio: includeAudio,
       });
       
       setStream(displayStream);
 
       // Display live preview (only for video formats)
-      if (liveVideoRef.current && selectedFormat !== 'wav') {
+      if (liveVideoRef.current && !isAudioOnly) {
         liveVideoRef.current.srcObject = displayStream;
         liveVideoRef.current.play();
       }
@@ -76,23 +128,25 @@ const ScreenRecorder = () => {
       
       // Fallback MIME types if the selected one isn't supported
       if (!MediaRecorder.isTypeSupported(mimeType)) {
-        if (selectedFormat === 'mp4') {
-          mimeType = 'video/webm; codecs=vp9'; // Fallback to WebM for MP4
+        if (formatOption.value.includes('mp4')) {
+          mimeType = 'video/webm; codecs=vp9';
           toast.info("MP4 not supported, using WebM format instead");
-        } else if (selectedFormat === 'wav') {
-          mimeType = 'audio/webm; codecs=opus'; // Fallback for audio
-          toast.info("WAV not supported, using WebM audio format instead");
+        } else if (isAudioOnly) {
+          mimeType = 'audio/webm; codecs=opus';
+          toast.info(`${formatOption.label} not supported, using WebM audio format instead`);
         }
       }
 
       const recorder = new MediaRecorder(displayStream, { mimeType });
       setMediaRecorder(recorder);
       
+      // Reset chunks
+      recordingChunks.current = [];
+      
       // Store recorded chunks
-      const chunks: Blob[] = [];
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          chunks.push(e.data);
+          recordingChunks.current.push(e.data);
         }
       };
 
@@ -101,14 +155,14 @@ const ScreenRecorder = () => {
         // Clean up stream tracks
         displayStream.getTracks().forEach(track => track.stop());
         
-        // Create preview when recording is stopped
-        if (chunks.length > 0) {
-          createRecordingPreview(chunks, mimeType);
+        // Create recording entry
+        if (recordingChunks.current.length > 0) {
+          createRecordingEntry(recordingChunks.current, mimeType, formatOption);
         }
         
         setRecording(false);
+        setPaused(false);
         setStream(null);
-        setRecordedChunks(chunks);
         
         // Clear live preview
         if (liveVideoRef.current) {
@@ -117,7 +171,7 @@ const ScreenRecorder = () => {
       };
 
       // Start recording
-      recorder.start(100); // Collect data every 100ms
+      recorder.start(100);
       setRecording(true);
       toast.success(`Recording started in ${formatOption.label} format`);
       
@@ -130,168 +184,331 @@ const ScreenRecorder = () => {
   const stopRecording = () => {
     if (mediaRecorder && recording) {
       mediaRecorder.stop();
-      toast.info("Preparing your recording...");
+      toast.info("Processing your recording...");
     }
   };
 
-  const createRecordingPreview = (chunks: Blob[], mimeType: string) => {
-    // Create blob from recorded chunks
-    const blob = new Blob(chunks, { type: mimeType });
-    
-    // Clean up previous URL
-    if (recordedVideoUrl) {
-      URL.revokeObjectURL(recordedVideoUrl);
+  const pauseRecording = () => {
+    if (mediaRecorder && recording && !paused) {
+      mediaRecorder.pause();
+      setPaused(true);
+      toast.info("Recording paused");
     }
-    
-    // Create preview URL
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorder && recording && paused) {
+      mediaRecorder.resume();
+      setPaused(false);
+      toast.info("Recording resumed");
+    }
+  };
+
+  const createRecordingEntry = (chunks: Blob[], mimeType: string, formatOption: any) => {
+    const blob = new Blob(chunks, { type: mimeType });
     const url = URL.createObjectURL(blob);
+    const timestamp = new Date();
+    
+    const recording: Recording = {
+      id: Date.now().toString(),
+      name: `Recording ${timestamp.toLocaleDateString()} ${timestamp.toLocaleTimeString()}`,
+      url,
+      format: formatOption.extension,
+      size: (blob.size / (1024 * 1024)).toFixed(2) + ' MB',
+      duration: '00:00', // Could implement actual duration tracking
+      timestamp
+    };
+    
+    setRecordings(prev => [recording, ...prev]);
     setRecordedVideoUrl(url);
     
     // Set video source for preview (only for video formats)
-    if (recordedVideoRef.current && selectedFormat !== 'wav') {
+    const isAudioOnly = formatOption.value.includes('wav') || 
+                       formatOption.value.includes('mp3') || 
+                       formatOption.value.includes('ogg');
+    
+    if (recordedVideoRef.current && !isAudioOnly) {
       recordedVideoRef.current.src = url;
       recordedVideoRef.current.load();
     }
     
-    toast.success("Recording ready for download!");
+    setActiveTab('preview');
+    toast.success("Recording ready!");
   };
 
-  const downloadRecording = () => {
-    if (!recordedVideoUrl) return;
-    
-    const formatOption = getSelectedFormatOption();
-    
-    // Create download link
+  const downloadRecording = (recording: Recording) => {
     const a = document.createElement('a');
-    a.href = recordedVideoUrl;
-    a.download = `screen-recording-${new Date().toISOString().split('T')[0]}.${formatOption.extension}`;
-    
-    // Trigger download
+    a.href = recording.url;
+    a.download = `${recording.name}.${recording.format}`;
     document.body.appendChild(a);
     a.click();
-    
-    // Clean up
     setTimeout(() => {
       document.body.removeChild(a);
       toast.success("Recording downloaded successfully!");
     }, 100);
   };
 
+  const deleteRecording = (id: string) => {
+    setRecordings(prev => {
+      const recording = prev.find(r => r.id === id);
+      if (recording) {
+        URL.revokeObjectURL(recording.url);
+      }
+      return prev.filter(r => r.id !== id);
+    });
+    toast.success("Recording deleted");
+  };
+
+  const previewRecording = (recording: Recording) => {
+    setRecordedVideoUrl(recording.url);
+    if (recordedVideoRef.current && !recording.format.includes('wav')) {
+      recordedVideoRef.current.src = recording.url;
+      recordedVideoRef.current.load();
+    }
+    setActiveTab('preview');
+  };
+
+  const isAudioOnlyFormat = () => {
+    const formatOption = getSelectedFormatOption();
+    return formatOption.value.includes('wav') || 
+           formatOption.value.includes('mp3') || 
+           formatOption.value.includes('ogg');
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
-      <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold mb-2 text-foreground">Screen Recorder</h1>
-        <p className="text-muted-foreground">Record your screen and save in multiple formats</p>
-      </div>
-
-      {/* Format Selection */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-foreground mb-2">
-          Output Format
-        </label>
-        <Select value={selectedFormat} onValueChange={(value: VideoFormat) => setSelectedFormat(value)} disabled={recording}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Select format" />
-          </SelectTrigger>
-          <SelectContent>
-            {formatOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      {/* Live Preview */}
-      <div className="w-full max-w-3xl mb-6">
-        <h3 className="text-lg font-semibold mb-2 text-foreground">Live Preview</h3>
-        <div className="relative w-full h-64 border-2 border-border rounded-lg bg-black overflow-hidden">
-          {selectedFormat !== 'wav' ? (
-            <>
-              <video 
-                ref={liveVideoRef} 
-                className="w-full h-full object-contain"
-                autoPlay 
-                muted
-                playsInline
-              >
-                Your browser doesn't support video playback.
-              </video>
-              {!stream && !recording && (
-                <div className="absolute inset-0 flex items-center justify-center bg-muted">
-                  <p className="text-muted-foreground text-center p-4">
-                    Start recording to preview your screen here
-                  </p>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-muted">
-              <p className="text-muted-foreground text-center">
-                Audio recording mode - no video preview available
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center space-x-3 mb-4">
+            <div className="bg-primary/10 p-3 rounded-full">
+              <Video className="h-8 w-8 text-primary" />
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Recording Controls */}
-      <div className="flex gap-4 mb-6">
-        <Button
-          className="bg-green-500 hover:bg-green-600 text-white px-6 py-3"
-          onClick={startRecording}
-          disabled={recording}
-        >
-          <Play className="mr-2 h-5 w-5" /> Start Recording
-        </Button>
-        <Button
-          className="bg-red-500 hover:bg-red-600 text-white px-6 py-3"
-          onClick={stopRecording}
-          disabled={!recording}
-        >
-          <StopCircle className="mr-2 h-5 w-5" /> Stop Recording
-        </Button>
-      </div>
-
-      {/* Recorded Video Preview & Download */}
-      {recordedVideoUrl && (
-        <div className="w-full max-w-3xl">
-          <h3 className="text-lg font-semibold mb-2 text-foreground">Recorded Video</h3>
-          {selectedFormat !== 'wav' ? (
-            <video 
-              ref={recordedVideoRef}
-              className="w-full h-auto border-2 border-border rounded-lg mb-4 bg-black"
-              style={{ maxHeight: "400px" }}
-              controls
-              preload="metadata"
-            >
-              Your browser doesn't support video playback.
-            </video>
-          ) : (
-            <div className="w-full h-32 border-2 border-border rounded-lg bg-muted flex items-center justify-center mb-4">
-              <p className="text-muted-foreground text-center">
-                Audio recording completed - {getSelectedFormatOption().label}
-              </p>
-            </div>
-          )}
-          
-          <div className="text-center">
-            <Button
-              onClick={downloadRecording}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3"
-            >
-              <Download className="mr-2 h-5 w-5" /> 
-              Download {getSelectedFormatOption().label}
-            </Button>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Advanced Screen Recorder
+            </h1>
           </div>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Professional screen recording with multiple formats, webcam overlay, and advanced controls
+          </p>
         </div>
-      )}
-      
-      <div className="mt-8 text-sm text-muted-foreground text-center">
-        <p className="mb-1">Note: Your recording will be saved locally in the selected format.</p>
-        <p>This app works best on Chrome and Edge browsers on Windows.</p>
-        <p>MP4 format may fallback to WebM if not supported by your browser.</p>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4 max-w-md mx-auto mb-8">
+            <TabsTrigger value="record" className="flex items-center space-x-2">
+              <Monitor className="h-4 w-4" />
+              <span>Record</span>
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="flex items-center space-x-2">
+              <Settings className="h-4 w-4" />
+              <span>Settings</span>
+            </TabsTrigger>
+            <TabsTrigger value="preview" className="flex items-center space-x-2">
+              <Video className="h-4 w-4" />
+              <span>Preview</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center space-x-2">
+              <History className="h-4 w-4" />
+              <span>History</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="record" className="space-y-6">
+            <div className="grid lg:grid-cols-3 gap-6">
+              {/* Live Preview */}
+              <div className="lg:col-span-2">
+                <Card className="h-full">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="flex items-center space-x-2">
+                      <Monitor className="h-5 w-5" />
+                      <span>Live Preview</span>
+                    </CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setFullscreenPreview(!fullscreenPreview)}
+                    >
+                      {fullscreenPreview ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className={`relative w-full bg-black rounded-lg overflow-hidden ${fullscreenPreview ? 'h-96' : 'h-64'}`}>
+                      {!isAudioOnlyFormat() ? (
+                        <>
+                          <video 
+                            ref={liveVideoRef} 
+                            className="w-full h-full object-contain"
+                            autoPlay 
+                            muted
+                            playsInline
+                          >
+                            Your browser doesn't support video playback.
+                          </video>
+                          
+                          {/* Webcam Overlay */}
+                          {webcamEnabled && webcamStream && (
+                            <div className="absolute bottom-4 right-4 w-32 h-24 bg-black rounded-lg overflow-hidden border-2 border-white shadow-lg">
+                              <video
+                                ref={webcamVideoRef}
+                                className="w-full h-full object-cover"
+                                autoPlay
+                                muted
+                                playsInline
+                              />
+                            </div>
+                          )}
+                          
+                          {!stream && !recording && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-muted/80">
+                              <div className="text-center p-6">
+                                <Monitor className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                                <p className="text-muted-foreground">
+                                  Start recording to preview your screen here
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-muted/80">
+                          <div className="text-center p-6">
+                            <Video className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                            <p className="text-muted-foreground">
+                              Audio recording mode - no video preview available
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Quick Settings */}
+              <div className="space-y-4">
+                <FormatSettings
+                  selectedFormat={selectedFormat}
+                  onFormatChange={setSelectedFormat}
+                  includeAudio={includeAudio}
+                  onAudioToggle={setIncludeAudio}
+                  quality={quality}
+                  onQualityChange={setQuality}
+                  disabled={recording}
+                />
+                
+                {/* Webcam Toggle */}
+                {!isAudioOnlyFormat() && (
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium">Webcam Overlay</h4>
+                          <p className="text-sm text-muted-foreground">Add webcam to recording</p>
+                        </div>
+                        <Switch 
+                          checked={webcamEnabled} 
+                          onCheckedChange={setWebcamEnabled}
+                          disabled={recording}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+
+            {/* Recording Controls */}
+            <div className="flex justify-center">
+              <RecordingControls
+                recording={recording}
+                paused={paused}
+                onStart={startRecording}
+                onStop={stopRecording}
+                onPause={pauseRecording}
+                onResume={resumeRecording}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="settings">
+            <div className="max-w-2xl mx-auto">
+              <FormatSettings
+                selectedFormat={selectedFormat}
+                onFormatChange={setSelectedFormat}
+                includeAudio={includeAudio}
+                onAudioToggle={setIncludeAudio}
+                quality={quality}
+                onQualityChange={setQuality}
+                disabled={recording}
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="preview">
+            {recordedVideoUrl ? (
+              <div className="max-w-4xl mx-auto space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Recorded Video</span>
+                      <Button onClick={() => downloadRecording({
+                        id: 'current',
+                        name: `Screen Recording ${new Date().toLocaleDateString()}`,
+                        url: recordedVideoUrl,
+                        format: getSelectedFormatOption().extension,
+                        size: '0 MB',
+                        duration: '00:00',
+                        timestamp: new Date()
+                      })}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Download
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {!isAudioOnlyFormat() ? (
+                      <video 
+                        ref={recordedVideoRef}
+                        className="w-full h-auto border-2 border-border rounded-lg bg-black"
+                        style={{ maxHeight: "500px" }}
+                        controls
+                        preload="metadata"
+                      >
+                        Your browser doesn't support video playback.
+                      </video>
+                    ) : (
+                      <div className="w-full h-48 border-2 border-border rounded-lg bg-muted flex items-center justify-center">
+                        <div className="text-center">
+                          <Video className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                          <p className="text-muted-foreground">
+                            Audio recording completed - {getSelectedFormatOption().label}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Video className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Recording Available</h3>
+                <p className="text-muted-foreground">Start recording to see preview here</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="history">
+            <div className="max-w-4xl mx-auto">
+              <RecordingHistory
+                recordings={recordings}
+                onDownload={downloadRecording}
+                onDelete={deleteRecording}
+                onPreview={previewRecording}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
