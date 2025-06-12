@@ -68,6 +68,7 @@ const ScreenRecorder = () => {
       // Display live preview (only for video formats)
       if (liveVideoRef.current && selectedFormat !== 'wav') {
         liveVideoRef.current.srcObject = displayStream;
+        liveVideoRef.current.play();
       }
 
       // Set up media recorder with selected format
@@ -92,7 +93,6 @@ const ScreenRecorder = () => {
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunks.push(e.data);
-          setRecordedChunks([...chunks]);
         }
       };
 
@@ -103,11 +103,17 @@ const ScreenRecorder = () => {
         
         // Create preview when recording is stopped
         if (chunks.length > 0) {
-          createRecordingPreview(chunks);
+          createRecordingPreview(chunks, mimeType);
         }
         
         setRecording(false);
         setStream(null);
+        setRecordedChunks(chunks);
+        
+        // Clear live preview
+        if (liveVideoRef.current) {
+          liveVideoRef.current.srcObject = null;
+        }
       };
 
       // Start recording
@@ -128,11 +134,14 @@ const ScreenRecorder = () => {
     }
   };
 
-  const createRecordingPreview = (chunks: Blob[]) => {
-    const formatOption = getSelectedFormatOption();
-    
+  const createRecordingPreview = (chunks: Blob[], mimeType: string) => {
     // Create blob from recorded chunks
-    const blob = new Blob(chunks, { type: formatOption.mimeType });
+    const blob = new Blob(chunks, { type: mimeType });
+    
+    // Clean up previous URL
+    if (recordedVideoUrl) {
+      URL.revokeObjectURL(recordedVideoUrl);
+    }
     
     // Create preview URL
     const url = URL.createObjectURL(blob);
@@ -141,6 +150,7 @@ const ScreenRecorder = () => {
     // Set video source for preview (only for video formats)
     if (recordedVideoRef.current && selectedFormat !== 'wav') {
       recordedVideoRef.current.src = url;
+      recordedVideoRef.current.load();
     }
     
     toast.success("Recording ready for download!");
@@ -196,31 +206,34 @@ const ScreenRecorder = () => {
       {/* Live Preview */}
       <div className="w-full max-w-3xl mb-6">
         <h3 className="text-lg font-semibold mb-2 text-foreground">Live Preview</h3>
-        {selectedFormat !== 'wav' ? (
-          <video 
-            ref={liveVideoRef} 
-            className="w-full h-auto border-2 border-border rounded-lg bg-black"
-            style={{ maxHeight: "400px" }} 
-            autoPlay 
-            muted
-            playsInline
-          >
-            Your browser doesn't support video playback.
-          </video>
-        ) : (
-          <div className="w-full h-64 border-2 border-border rounded-lg bg-muted flex items-center justify-center">
-            <p className="text-muted-foreground text-center">
-              Audio recording mode - no video preview available
-            </p>
-          </div>
-        )}
-        {!stream && !recording && selectedFormat !== 'wav' && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-muted-foreground text-center p-4">
-              Start recording to preview your screen here
-            </p>
-          </div>
-        )}
+        <div className="relative w-full h-64 border-2 border-border rounded-lg bg-black overflow-hidden">
+          {selectedFormat !== 'wav' ? (
+            <>
+              <video 
+                ref={liveVideoRef} 
+                className="w-full h-full object-contain"
+                autoPlay 
+                muted
+                playsInline
+              >
+                Your browser doesn't support video playback.
+              </video>
+              {!stream && !recording && (
+                <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                  <p className="text-muted-foreground text-center p-4">
+                    Start recording to preview your screen here
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-muted">
+              <p className="text-muted-foreground text-center">
+                Audio recording mode - no video preview available
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Recording Controls */}
@@ -248,9 +261,10 @@ const ScreenRecorder = () => {
           {selectedFormat !== 'wav' ? (
             <video 
               ref={recordedVideoRef}
-              className="w-full h-auto border-2 border-border rounded-lg mb-4"
+              className="w-full h-auto border-2 border-border rounded-lg mb-4 bg-black"
               style={{ maxHeight: "400px" }}
               controls
+              preload="metadata"
             >
               Your browser doesn't support video playback.
             </video>
