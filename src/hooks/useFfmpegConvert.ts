@@ -26,9 +26,26 @@ export function useFfmpegConvert() {
       outputUrl: null,
     });
 
-    // Dynamically import @ffmpeg/ffmpeg ESM exports at runtime
-    // This avoids build errors related to ESM/CJS
-    const { createFFmpeg, fetchFile } = await import("@ffmpeg/ffmpeg");
+    // Correct dynamic import handling for ESM/CJS.
+    const ffmpegModule = await import("@ffmpeg/ffmpeg");
+
+    // Support both ESM and CJS shapes
+    const createFFmpeg =
+      (ffmpegModule as any).createFFmpeg ||
+      (ffmpegModule as any).default?.createFFmpeg;
+    const fetchFile =
+      (ffmpegModule as any).fetchFile ||
+      (ffmpegModule as any).default?.fetchFile;
+
+    if (!createFFmpeg || !fetchFile) {
+      setState({
+        loading: false,
+        progress: 0,
+        error: "Could not load FFmpeg methods. Please check the build environment.",
+        outputUrl: null,
+      });
+      return null;
+    }
 
     if (!ffmpegRef.current) {
       ffmpegRef.current = createFFmpeg({ log: false });
