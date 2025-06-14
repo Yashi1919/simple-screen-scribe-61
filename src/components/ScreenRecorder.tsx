@@ -26,7 +26,7 @@ const ScreenRecorder = () => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
-  const [selectedFormat, setSelectedFormat] = useState('webm-vp9');
+  const [selectedFormat, setSelectedFormat] = useState('mp4-h264'); // Default to MP4 for better compatibility
   const [includeAudio, setIncludeAudio] = useState(true);
   const [quality, setQuality] = useState('high');
   const [webcamEnabled, setWebcamEnabled] = useState(false);
@@ -64,33 +64,26 @@ const ScreenRecorder = () => {
     return formatOptions.find(option => option.value === selectedFormat) || formatOptions[0];
   };
 
-  const getBestSupportedMimeType = (preferredFormat: string) => {
-    // WhatsApp-compatible formats prioritized
-    const formatPriority = [
-      'video/mp4; codecs="avc1.42E01E, mp4a.40.2"', // H.264 + AAC (WhatsApp preferred)
+  const getBestSupportedMimeType = () => {
+    // Prioritize widely supported formats for better compatibility
+    const supportedFormats = [
+      'video/mp4; codecs="avc1.42E01E, mp4a.40.2"', // H.264 + AAC
       'video/mp4; codecs="avc1.42E01E"', // H.264 only
       'video/mp4', // Generic MP4
       'video/webm; codecs=vp9,opus',
-      'video/webm; codecs=vp8,opus', 
-      'video/webm; codecs=h264,opus',
+      'video/webm; codecs=vp8,opus',
       'video/webm'
     ];
 
-    // Check if preferred format is supported
-    const formatOption = getSelectedFormatOption();
-    if (MediaRecorder.isTypeSupported(formatOption.mimeType)) {
-      return formatOption.mimeType;
-    }
-
-    // Find first supported format from priority list
-    for (const mimeType of formatPriority) {
+    for (const mimeType of supportedFormats) {
       if (MediaRecorder.isTypeSupported(mimeType)) {
-        console.log(`Using WhatsApp-compatible format: ${mimeType}`);
+        console.log(`Using supported format: ${mimeType}`);
         return mimeType;
       }
     }
 
-    // Last resort
+    // Fallback
+    console.warn('No preferred format supported, using default');
     return 'video/mp4';
   };
 
@@ -141,50 +134,44 @@ const ScreenRecorder = () => {
                          formatOption.value.includes('mp3') || 
                          formatOption.value.includes('ogg');
       
-      // Get screen capture stream with WhatsApp-optimized settings
       const constraints: any = {
         video: !isAudioOnly ? { 
           displaySurface: "monitor",
-          width: { ideal: 1280, max: 1920 }, // WhatsApp handles 720p-1080p well
+          width: { ideal: 1280, max: 1920 },
           height: { ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 30 } // Consistent 30fps for WhatsApp
+          frameRate: { ideal: 30, max: 30 }
         } : false,
         audio: includeAudio ? {
           echoCancellation: true,
           noiseSuppression: true,
           sampleRate: 44100,
-          channelCount: 2 // Stereo for better compatibility
+          channelCount: 2
         } : false,
       };
 
       const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       setStream(displayStream);
 
-      // Display live preview (only for video formats)
       if (liveVideoRef.current && !isAudioOnly) {
         liveVideoRef.current.srcObject = displayStream;
         liveVideoRef.current.play().catch(e => console.log('Live preview play error:', e));
       }
 
-      // Get WhatsApp-compatible MIME type
-      const mimeType = getBestSupportedMimeType(formatOption.value);
+      const mimeType = getBestSupportedMimeType();
       
       const recorderOptions: MediaRecorderOptions = {
         mimeType,
-        // WhatsApp-optimized bitrates (not too high to avoid compression issues)
         videoBitsPerSecond: quality === 'ultra' ? 4000000 : 
                            quality === 'high' ? 2500000 : 
                            quality === 'medium' ? 1500000 : 800000,
-        audioBitsPerSecond: 128000 // Standard audio bitrate
+        audioBitsPerSecond: 128000
       };
 
       const recorder = new MediaRecorder(displayStream, recorderOptions);
       setMediaRecorder(recorder);
       
-      // Reset chunks
       recordingChunks.current = [];
       
-      // Store recorded chunks
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           recordingChunks.current.push(e.data);
@@ -192,13 +179,10 @@ const ScreenRecorder = () => {
         }
       };
 
-      // Handle recording stop
       recorder.onstop = () => {
         console.log('Recording stopped, processing chunks...');
-        // Clean up stream tracks
         displayStream.getTracks().forEach(track => track.stop());
         
-        // Create recording entry
         if (recordingChunks.current.length > 0) {
           createRecordingEntry(recordingChunks.current, mimeType, formatOption);
         } else {
@@ -209,16 +193,14 @@ const ScreenRecorder = () => {
         setPaused(false);
         setStream(null);
         
-        // Clear live preview
         if (liveVideoRef.current) {
           liveVideoRef.current.srcObject = null;
         }
       };
 
-      // Start recording with smaller time slices for better compatibility
-      recorder.start(100); // Smaller chunks for better WhatsApp compatibility
+      recorder.start(1000); // Use 1 second chunks for better stability
       setRecording(true);
-      toast.success(`Recording started in ${formatOption.label} format (WhatsApp compatible)`);
+      toast.success(`Recording started in ${formatOption.label} format`);
       
     } catch (err) {
       console.error("Error starting screen recording:", err);
@@ -250,19 +232,28 @@ const ScreenRecorder = () => {
   };
 
   const createRecordingEntry = (chunks: Blob[], mimeType: string, formatOption: any) => {
-    console.log('Creating WhatsApp-compatible recording entry with', chunks.length, 'chunks');
+    console.log('Creating recording entry with', chunks.length, 'chunks');
     
-    // Create blob with explicit type for WhatsApp compatibility
-    const blob = new Blob(chunks, { 
-      type: mimeType.includes('mp4') ? 'video/mp4' : mimeType 
-    });
+    // Create blob with proper MIME type
+    const blob = new Blob(chunks, { type: mimeType });
     console.log('Created blob:', blob.size, 'bytes, type:', blob.type);
+    
+    // Validate blob
+    if (blob.size === 0) {
+      toast.error('Recording failed - no data captured');
+      return;
+    }
     
     const url = URL.createObjectURL(blob);
     const timestamp = new Date();
     
-    // Use .mp4 extension for better WhatsApp compatibility
-    const fileExtension = mimeType.includes('mp4') ? 'mp4' : formatOption.extension;
+    // Use proper file extension based on actual MIME type
+    let fileExtension = 'mp4'; // Default to mp4
+    if (mimeType.includes('webm')) {
+      fileExtension = 'webm';
+    } else if (mimeType.includes('mp4')) {
+      fileExtension = 'mp4';
+    }
     
     const recording: Recording = {
       id: Date.now().toString(),
@@ -282,36 +273,54 @@ const ScreenRecorder = () => {
                        formatOption.value.includes('ogg');
     
     if (!isAudioOnly) {
-      // Clear any previous video source
+      setVideoLoading(true);
+      console.log('Setting up video preview for:', url);
+      
+      // Clear previous video
       if (recordedVideoRef.current) {
-        recordedVideoRef.current.src = '';
+        recordedVideoRef.current.pause();
+        recordedVideoRef.current.removeAttribute('src');
         recordedVideoRef.current.load();
       }
       
-      // Set new video source with proper event handling
+      // Set up new video with proper error handling
       setTimeout(() => {
         if (recordedVideoRef.current) {
-          setVideoLoading(true);
-          recordedVideoRef.current.src = url;
+          const videoElement = recordedVideoRef.current;
           
-          recordedVideoRef.current.onloadeddata = () => {
-            console.log('WhatsApp-compatible video loaded successfully');
+          videoElement.onloadstart = () => {
+            console.log('Video loading started');
+          };
+          
+          videoElement.onloadeddata = () => {
+            console.log('Video data loaded successfully');
             setVideoLoading(false);
           };
           
-          recordedVideoRef.current.onerror = (e) => {
+          videoElement.oncanplay = () => {
+            console.log('Video can start playing');
+          };
+          
+          videoElement.onerror = (e) => {
             console.error('Video loading error:', e);
+            console.error('Video error details:', videoElement.error);
             setVideoLoading(false);
-            toast.error('Error loading video preview');
+            toast.error('Video format not supported by browser. Try a different format.');
           };
           
-          recordedVideoRef.current.load();
+          videoElement.onloadedmetadata = () => {
+            console.log('Video metadata loaded');
+          };
+          
+          // Set the source and load
+          videoElement.src = url;
+          videoElement.load();
         }
       }, 100);
     }
     
     setActiveTab('preview');
-    toast.success("WhatsApp-compatible recording ready for sharing!");
+    toast.success("Recording ready for preview!");
   };
 
   const downloadRecording = (recording: Recording) => {
@@ -367,6 +376,7 @@ const ScreenRecorder = () => {
   };
 
   const previewRecording = (recording: Recording) => {
+    console.log('Previewing recording:', recording);
     setRecordedVideoUrl(recording.url);
     const isAudioOnly = recording.format.includes('wav') || 
                        recording.format.includes('mp3') || 
@@ -375,28 +385,30 @@ const ScreenRecorder = () => {
     if (!isAudioOnly && recordedVideoRef.current) {
       setVideoLoading(true);
       
+      const videoElement = recordedVideoRef.current;
+      
       // Clear previous source
-      recordedVideoRef.current.src = '';
-      recordedVideoRef.current.load();
+      videoElement.pause();
+      videoElement.removeAttribute('src');
+      videoElement.load();
+      
+      // Set up event handlers
+      videoElement.onloadeddata = () => {
+        console.log('Preview video loaded successfully');
+        setVideoLoading(false);
+      };
+      
+      videoElement.onerror = (e) => {
+        console.error('Preview video loading error:', e);
+        console.error('Preview video error details:', videoElement.error);
+        setVideoLoading(false);
+        toast.error('Video format not supported. Try downloading and playing in a media player.');
+      };
       
       // Set new source
       setTimeout(() => {
-        if (recordedVideoRef.current) {
-          recordedVideoRef.current.src = recording.url;
-          
-          recordedVideoRef.current.onloadeddata = () => {
-            console.log('Preview video loaded successfully');
-            setVideoLoading(false);
-          };
-          
-          recordedVideoRef.current.onerror = (e) => {
-            console.error('Preview video loading error:', e);
-            setVideoLoading(false);
-            toast.error('Error loading video preview');
-          };
-          
-          recordedVideoRef.current.load();
-        }
+        videoElement.src = recording.url;
+        videoElement.load();
       }, 100);
     }
     setActiveTab('preview');
@@ -613,11 +625,19 @@ const ScreenRecorder = () => {
                           className="w-full h-auto border-2 border-border rounded-lg bg-black"
                           style={{ maxHeight: "500px" }}
                           controls
-                          preload="auto"
+                          preload="metadata"
                           playsInline
+                          muted={false}
                         >
-                          Your browser doesn't support video playback.
+                          <p>Your browser doesn't support video playback. Please try downloading the video.</p>
                         </video>
+                        {recordedVideoRef.current?.error && (
+                          <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                            <p className="text-destructive text-sm">
+                              Video format not supported by browser. Please download the video and play it in a media player.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="w-full h-48 border-2 border-border rounded-lg bg-muted flex items-center justify-center">
