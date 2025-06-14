@@ -266,40 +266,39 @@ const ScreenRecorder = () => {
     setRecordings(prev => [recording, ...prev]);
     setRecordedVideoUrl(url);
     
-    // Improved video preview setup
     const isAudioOnly = formatOption.value.includes('wav') || 
                        formatOption.value.includes('mp3') || 
                        formatOption.value.includes('ogg');
     
-    if (!isAudioOnly && recordedVideoRef.current) {
-      setVideoLoading(true);
-      recordedVideoRef.current.src = url;
-      recordedVideoRef.current.load();
+    if (!isAudioOnly) {
+      // Clear any previous video source
+      if (recordedVideoRef.current) {
+        recordedVideoRef.current.src = '';
+        recordedVideoRef.current.load();
+      }
       
-      // Better event handling for video loading
-      recordedVideoRef.current.onloadedmetadata = () => {
-        console.log('Video metadata loaded');
-        setVideoLoading(false);
-      };
-      
-      recordedVideoRef.current.onloadeddata = () => {
-        console.log('Video data loaded successfully');
-        setVideoLoading(false);
-      };
-      
-      recordedVideoRef.current.onerror = (e) => {
-        console.error('Video loading error:', e);
-        setVideoLoading(false);
-        toast.error('Error loading video preview');
-      };
-      
-      recordedVideoRef.current.oncanplay = () => {
-        console.log('Video can play');
-        setVideoLoading(false);
-      };
+      // Set new video source with proper event handling
+      setTimeout(() => {
+        if (recordedVideoRef.current) {
+          setVideoLoading(true);
+          recordedVideoRef.current.src = url;
+          
+          recordedVideoRef.current.onloadeddata = () => {
+            console.log('Video loaded successfully');
+            setVideoLoading(false);
+          };
+          
+          recordedVideoRef.current.onerror = (e) => {
+            console.error('Video loading error:', e);
+            setVideoLoading(false);
+            toast.error('Error loading video preview');
+          };
+          
+          recordedVideoRef.current.load();
+        }
+      }, 100);
     }
     
-    // Switch to preview tab to show the recorded video
     setActiveTab('preview');
     toast.success("Recording ready for preview!");
   };
@@ -367,19 +366,30 @@ const ScreenRecorder = () => {
     
     if (!isAudioOnly && recordedVideoRef.current) {
       setVideoLoading(true);
-      recordedVideoRef.current.src = recording.url;
+      
+      // Clear previous source
+      recordedVideoRef.current.src = '';
       recordedVideoRef.current.load();
       
-      recordedVideoRef.current.onloadeddata = () => {
-        console.log('Preview video loaded successfully');
-        setVideoLoading(false);
-      };
-      
-      recordedVideoRef.current.onerror = (e) => {
-        console.error('Preview video loading error:', e);
-        setVideoLoading(false);
-        toast.error('Error loading video preview');
-      };
+      // Set new source
+      setTimeout(() => {
+        if (recordedVideoRef.current) {
+          recordedVideoRef.current.src = recording.url;
+          
+          recordedVideoRef.current.onloadeddata = () => {
+            console.log('Preview video loaded successfully');
+            setVideoLoading(false);
+          };
+          
+          recordedVideoRef.current.onerror = (e) => {
+            console.error('Preview video loading error:', e);
+            setVideoLoading(false);
+            toast.error('Error loading video preview');
+          };
+          
+          recordedVideoRef.current.load();
+        }
+      }, 100);
     }
     setActiveTab('preview');
   };
@@ -595,15 +605,8 @@ const ScreenRecorder = () => {
                           className="w-full h-auto border-2 border-border rounded-lg bg-black"
                           style={{ maxHeight: "500px" }}
                           controls
-                          preload="metadata"
+                          preload="auto"
                           playsInline
-                          onLoadStart={() => setVideoLoading(true)}
-                          onCanPlay={() => setVideoLoading(false)}
-                          onError={(e) => {
-                            console.error('Recorded video playback error:', e);
-                            setVideoLoading(false);
-                            toast.error('Error playing video. Try downloading instead.');
-                          }}
                         >
                           Your browser doesn't support video playback.
                         </video>
