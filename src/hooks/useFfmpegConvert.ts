@@ -1,6 +1,5 @@
-
 import { useRef, useState } from "react";
-import FFmpeg from "@ffmpeg/ffmpeg"; // Use default import
+import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
 
 export interface FfmpegConvertState {
   loading: boolean;
@@ -10,7 +9,7 @@ export interface FfmpegConvertState {
 }
 
 export function useFfmpegConvert() {
-  const ffmpegRef = useRef<ReturnType<typeof FFmpeg.createFFmpeg> | null>(null);
+  const ffmpegRef = useRef<ReturnType<typeof createFFmpeg> | null>(null);
   const [state, setState] = useState<FfmpegConvertState>({
     loading: false,
     progress: 0,
@@ -28,7 +27,7 @@ export function useFfmpegConvert() {
     });
 
     if (!ffmpegRef.current) {
-      ffmpegRef.current = FFmpeg.createFFmpeg({ log: false, corePath: undefined });
+      ffmpegRef.current = createFFmpeg({ log: false });
     }
     const ffmpeg = ffmpegRef.current;
 
@@ -45,7 +44,7 @@ export function useFfmpegConvert() {
 
     try {
       // Write input file
-      ffmpeg.FS('writeFile', 'input.webm', await FFmpeg.fetchFile(inputBlob));
+      ffmpeg.FS('writeFile', 'input.webm', await fetchFile(inputBlob));
 
       // Run the conversion command
       await ffmpeg.run(
