@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +34,7 @@ const ScreenRecorder = () => {
   const [fullscreenPreview, setFullscreenPreview] = useState(false);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [activeTab, setActiveTab] = useState('record');
+  const [videoLoading, setVideoLoading] = useState(false);
   
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const recordedVideoRef = useRef<HTMLVideoElement>(null);
@@ -259,32 +259,49 @@ const ScreenRecorder = () => {
       url,
       format: formatOption.extension,
       size: (blob.size / (1024 * 1024)).toFixed(2) + ' MB',
-      duration: '00:00', // Could implement actual duration tracking
+      duration: '00:00',
       timestamp
     };
     
     setRecordings(prev => [recording, ...prev]);
     setRecordedVideoUrl(url);
     
-    // Set video source for preview (only for video formats)
+    // Improved video preview setup
     const isAudioOnly = formatOption.value.includes('wav') || 
                        formatOption.value.includes('mp3') || 
                        formatOption.value.includes('ogg');
     
-    if (recordedVideoRef.current && !isAudioOnly) {
+    if (!isAudioOnly && recordedVideoRef.current) {
+      setVideoLoading(true);
       recordedVideoRef.current.src = url;
       recordedVideoRef.current.load();
-      // Add event listeners for better debugging
-      recordedVideoRef.current.onloadeddata = () => {
-        console.log('Video loaded successfully');
+      
+      // Better event handling for video loading
+      recordedVideoRef.current.onloadedmetadata = () => {
+        console.log('Video metadata loaded');
+        setVideoLoading(false);
       };
+      
+      recordedVideoRef.current.onloadeddata = () => {
+        console.log('Video data loaded successfully');
+        setVideoLoading(false);
+      };
+      
       recordedVideoRef.current.onerror = (e) => {
         console.error('Video loading error:', e);
+        setVideoLoading(false);
+        toast.error('Error loading video preview');
+      };
+      
+      recordedVideoRef.current.oncanplay = () => {
+        console.log('Video can play');
+        setVideoLoading(false);
       };
     }
     
+    // Switch to preview tab to show the recorded video
     setActiveTab('preview');
-    toast.success("Recording ready!");
+    toast.success("Recording ready for preview!");
   };
 
   const downloadRecording = (recording: Recording) => {
@@ -348,9 +365,21 @@ const ScreenRecorder = () => {
                        recording.format.includes('mp3') || 
                        recording.format.includes('ogg');
     
-    if (recordedVideoRef.current && !isAudioOnly) {
+    if (!isAudioOnly && recordedVideoRef.current) {
+      setVideoLoading(true);
       recordedVideoRef.current.src = recording.url;
       recordedVideoRef.current.load();
+      
+      recordedVideoRef.current.onloadeddata = () => {
+        console.log('Preview video loaded successfully');
+        setVideoLoading(false);
+      };
+      
+      recordedVideoRef.current.onerror = (e) => {
+        console.error('Preview video loading error:', e);
+        setVideoLoading(false);
+        toast.error('Error loading video preview');
+      };
     }
     setActiveTab('preview');
   };
@@ -538,7 +567,7 @@ const ScreenRecorder = () => {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
-                      <span>Recorded Video</span>
+                      <span>Recorded Video Preview</span>
                       <Button onClick={() => downloadRecording({
                         id: 'current',
                         name: `Screen Recording ${new Date().toLocaleDateString()}`,
@@ -555,23 +584,30 @@ const ScreenRecorder = () => {
                   </CardHeader>
                   <CardContent>
                     {!isAudioOnlyFormat() ? (
-                      <video 
-                        ref={recordedVideoRef}
-                        className="w-full h-auto border-2 border-border rounded-lg bg-black"
-                        style={{ maxHeight: "500px" }}
-                        controls
-                        preload="metadata"
-                        playsInline
-                        onError={(e) => {
-                          console.error('Recorded video error:', e);
-                          toast.error('Error loading video preview');
-                        }}
-                        onLoadedData={() => {
-                          console.log('Recorded video loaded successfully');
-                        }}
-                      >
-                        Your browser doesn't support video playback.
-                      </video>
+                      <div className="relative">
+                        {videoLoading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg z-10">
+                            <div className="text-white">Loading video...</div>
+                          </div>
+                        )}
+                        <video 
+                          ref={recordedVideoRef}
+                          className="w-full h-auto border-2 border-border rounded-lg bg-black"
+                          style={{ maxHeight: "500px" }}
+                          controls
+                          preload="metadata"
+                          playsInline
+                          onLoadStart={() => setVideoLoading(true)}
+                          onCanPlay={() => setVideoLoading(false)}
+                          onError={(e) => {
+                            console.error('Recorded video playback error:', e);
+                            setVideoLoading(false);
+                            toast.error('Error playing video. Try downloading instead.');
+                          }}
+                        >
+                          Your browser doesn't support video playback.
+                        </video>
+                      </div>
                     ) : (
                       <div className="w-full h-48 border-2 border-border rounded-lg bg-muted flex items-center justify-center">
                         <div className="text-center">
