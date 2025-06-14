@@ -22,9 +22,9 @@ interface FormatSettingsProps {
 }
 
 const formatOptions: FormatOption[] = [
+  { value: 'mp4-h264', label: 'MP4 (H.264) - Recommended for WhatsApp', mimeType: 'video/mp4', extension: 'mp4', quality: 'high' },
   { value: 'webm-vp9', label: 'WebM (VP9)', mimeType: 'video/webm; codecs=vp9', extension: 'webm', quality: 'high' },
   { value: 'webm-vp8', label: 'WebM (VP8)', mimeType: 'video/webm; codecs=vp8', extension: 'webm', quality: 'medium' },
-  { value: 'mp4-h264', label: 'MP4 (H.264)', mimeType: 'video/mp4', extension: 'mp4', quality: 'high' },
   { value: 'mkv', label: 'MKV', mimeType: 'video/x-matroska', extension: 'mkv', quality: 'high' },
   { value: 'avi', label: 'AVI', mimeType: 'video/avi', extension: 'avi', quality: 'medium' },
   { value: 'mov', label: 'MOV', mimeType: 'video/quicktime', extension: 'mov', quality: 'high' },
@@ -90,6 +90,9 @@ const FormatSettings = ({
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            💡 MP4 format is recommended for WhatsApp and social media sharing
+          </p>
         </div>
 
         {/* Quality Selection - Only for video formats */}
@@ -134,6 +137,9 @@ const FormatSettings = ({
             <strong>Selected:</strong> {selectedFormatOption.label}<br/>
             <strong>Extension:</strong> .{selectedFormatOption.extension}<br/>
             {!isAudioOnly && <><strong>Quality:</strong> {qualityOptions.find(q => q.value === quality)?.label}</>}
+            {selectedFormatOption.value === 'mp4-h264' && (
+              <div className="text-green-600 font-medium mt-1">✓ WhatsApp Compatible</div>
+            )}
           </div>
         )}
       </CardContent>
