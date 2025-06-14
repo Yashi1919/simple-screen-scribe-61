@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import RecordingControls from "./RecordingControls";
 import FormatSettings, { formatOptions } from "./FormatSettings";
 import RecordingHistory from "./RecordingHistory";
+import { useFfmpegConvert } from "@/hooks/useFfmpegConvert";
 
 interface Recording {
   id: string;
@@ -35,7 +36,9 @@ const ScreenRecorder = () => {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [activeTab, setActiveTab] = useState('record');
   const [videoLoading, setVideoLoading] = useState(false);
-  
+  const [convertingMp4, setConvertingMp4] = useState(false);
+  const [convertedMp4Url, setConvertedMp4Url] = useState<string | null>(null);
+
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const recordedVideoRef = useRef<HTMLVideoElement>(null);
   const webcamVideoRef = useRef<HTMLVideoElement>(null);
@@ -477,6 +480,51 @@ const ScreenRecorder = () => {
            formatOption.value.includes('ogg');
   };
 
+  // FFmpeg hook for conversion
+  const {
+    loading: ffmpegLoading,
+    progress: ffmpegProgress,
+    error: ffmpegError,
+    outputUrl: ffmpegOutputUrl,
+    convertWebmToMp4,
+    cleanUp: cleanUpFfmpeg,
+  } = useFfmpegConvert();
+
+  // Helper to get current Blob data from recordedVideoUrl (WebM) for conversion
+  const fetchBlobFromUrl = async (url: string) => {
+    const res = await fetch(url);
+    return await res.blob();
+  };
+
+  // Handler to convert WebM to MP4 using ffmpeg.wasm
+  const handleConvertToMp4 = async () => {
+    if (!recordedVideoUrl) return;
+    setConvertingMp4(true);
+    cleanUpFfmpeg();
+    toast.info("Converting to MP4... This may take a while for large videos.");
+    const blob = await fetchBlobFromUrl(recordedVideoUrl);
+
+    const mp4Url = await convertWebmToMp4(blob);
+
+    if (mp4Url) {
+      setConvertedMp4Url(mp4Url);
+      toast.success("Conversion complete! You can now download a real MP4 for WhatsApp.");
+    } else {
+      toast.error("MP4 conversion failed. Please try with a shorter video or use an external tool.");
+    }
+    setConvertingMp4(false);
+  };
+
+  // Clean up converted URLs when switching files or on unmount
+  useEffect(() => {
+    return () => {
+      if (convertedMp4Url) {
+        URL.revokeObjectURL(convertedMp4Url);
+      }
+      cleanUpFfmpeg();
+    };
+  }, [convertedMp4Url, cleanUpFfmpeg]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4">
       <div className="max-w-7xl mx-auto">
@@ -654,21 +702,52 @@ const ScreenRecorder = () => {
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
                       <span>Recorded Video Preview</span>
-                      <Button onClick={() => downloadRecording({
-                        id: 'current',
-                        name: `Screen Recording ${new Date().toLocaleDateString()}`,
-                        url: recordedVideoUrl,
-                        format: getSelectedFormatOption().extension,
-                        size: '0 MB',
-                        duration: '00:00',
-                        timestamp: new Date()
-                      })}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download
-                      </Button>
+                      <div className="flex gap-2">
+                        {/* If the video is in "webm pretending to be mp4" or webm, show convert button */}
+                        {!isAudioOnlyFormat() && (
+                          <>
+                            {(
+                              getSelectedFormatOption().extension === "webm" ||
+                              (getSelectedFormatOption().extension === "mp4" && !trueMp4Supported())
+                            ) && (
+                              <Button
+                                onClick={handleConvertToMp4}
+                                disabled={convertingMp4 || ffmpegLoading}
+                                variant="secondary"
+                              >
+                                {ffmpegLoading || convertingMp4 ? (
+                                  <span>
+                                    Converting... {ffmpegProgress ? `${ffmpegProgress}%` : ""}
+                                  </span>
+                                ) : (
+                                  <span>Convert to MP4</span>
+                                )}
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        {/* Download button for original */}
+                        <Button onClick={() => downloadRecording({
+                          id: 'current',
+                          name: `Screen Recording ${new Date().toLocaleDateString()}`,
+                          url: recordedVideoUrl,
+                          format: getSelectedFormatOption().extension,
+                          size: '0 MB',
+                          duration: '00:00',
+                          timestamp: new Date()
+                        })}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download
+                        </Button>
+                      </div>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
+                    {ffmpegError && (
+                      <div className="mb-2 p-2 bg-destructive/10 text-destructive rounded">
+                        <p className="text-xs">{ffmpegError}</p>
+                      </div>
+                    )}
                     {!isAudioOnlyFormat() ? (
                       <div className="relative">
                         {videoLoading && (
@@ -692,6 +771,35 @@ const ScreenRecorder = () => {
                             <p className="text-destructive text-sm">
                               Video format not supported by browser. Please download the video and play it in a media player.
                             </p>
+                          </div>
+                        )}
+                        {/* If conversion done, show the MP4 download + player */}
+                        {convertedMp4Url && (
+                          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="mb-2 font-medium text-green-800">
+                              ✅ Converted MP4 (Works on WhatsApp & full metadata)
+                            </div>
+                            <video
+                              src={convertedMp4Url}
+                              className="w-full h-auto border-2 border-green-400 rounded bg-black"
+                              style={{ maxHeight: "400px" }}
+                              controls
+                            />
+                            <Button
+                              className="mt-3"
+                              onClick={() => {
+                                const a = document.createElement('a');
+                                a.href = convertedMp4Url;
+                                a.download = `Screen Recording ${new Date().toLocaleDateString()}.mp4`;
+                                document.body.appendChild(a);
+                                a.click();
+                                setTimeout(() => document.body.removeChild(a), 100);
+                                toast.success("WhatsApp-ready MP4 downloaded!");
+                              }}
+                            >
+                              <Download className="mr-2 h-4 w-4" />
+                              Download MP4
+                            </Button>
                           </div>
                         )}
                       </div>
