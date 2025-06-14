@@ -1,5 +1,5 @@
+
 import { useRef, useState } from "react";
-import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
 
 export interface FfmpegConvertState {
   loading: boolean;
@@ -9,7 +9,7 @@ export interface FfmpegConvertState {
 }
 
 export function useFfmpegConvert() {
-  const ffmpegRef = useRef<ReturnType<typeof createFFmpeg> | null>(null);
+  const ffmpegRef = useRef<any>(null); // We don't know the module shape until import
   const [state, setState] = useState<FfmpegConvertState>({
     loading: false,
     progress: 0,
@@ -26,6 +26,10 @@ export function useFfmpegConvert() {
       outputUrl: null,
     });
 
+    // Dynamically import @ffmpeg/ffmpeg ESM exports at runtime
+    // This avoids build errors related to ESM/CJS
+    const { createFFmpeg, fetchFile } = await import("@ffmpeg/ffmpeg");
+
     if (!ffmpegRef.current) {
       ffmpegRef.current = createFFmpeg({ log: false });
     }
@@ -35,7 +39,7 @@ export function useFfmpegConvert() {
       await ffmpeg.load();
     }
 
-    ffmpeg.setProgress(({ ratio }) => {
+    ffmpeg.setProgress(({ ratio }: { ratio: number }) => {
       setState(prev => ({
         ...prev,
         progress: Math.round(ratio * 100),
@@ -104,3 +108,4 @@ export function useFfmpegConvert() {
     cleanUp,
   };
 }
+
