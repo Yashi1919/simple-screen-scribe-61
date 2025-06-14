@@ -64,10 +64,43 @@ const ScreenRecorder = () => {
     return formatOptions.find(option => option.value === selectedFormat) || formatOptions[0];
   };
 
+  const getBestSupportedMimeType = (preferredFormat: string) => {
+    // Priority list of formats for better compatibility
+    const formatPriority = [
+      'video/webm; codecs=vp9,opus',
+      'video/webm; codecs=vp8,opus', 
+      'video/webm; codecs=h264,opus',
+      'video/webm',
+      'video/mp4; codecs=h264,aac',
+      'video/mp4'
+    ];
+
+    // Check if preferred format is supported
+    const formatOption = getSelectedFormatOption();
+    if (MediaRecorder.isTypeSupported(formatOption.mimeType)) {
+      return formatOption.mimeType;
+    }
+
+    // Find first supported format from priority list
+    for (const mimeType of formatPriority) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        console.log(`Using fallback format: ${mimeType}`);
+        return mimeType;
+      }
+    }
+
+    // Last resort
+    return 'video/webm';
+  };
+
   const startWebcam = async () => {
     try {
       const webcamStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 240 },
+        video: { 
+          width: { ideal: 320 }, 
+          height: { ideal: 240 },
+          facingMode: 'user'
+        },
         audio: false
       });
       setWebcamStream(webcamStream);
@@ -107,37 +140,41 @@ const ScreenRecorder = () => {
                          formatOption.value.includes('mp3') || 
                          formatOption.value.includes('ogg');
       
-      // Get screen capture stream
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      // Get screen capture stream with better quality settings
+      const constraints: any = {
         video: !isAudioOnly ? { 
           displaySurface: "monitor",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
         } : false,
-        audio: includeAudio,
-      });
-      
+        audio: includeAudio ? {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        } : false,
+      };
+
+      const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       setStream(displayStream);
 
       // Display live preview (only for video formats)
       if (liveVideoRef.current && !isAudioOnly) {
         liveVideoRef.current.srcObject = displayStream;
-        liveVideoRef.current.play();
+        liveVideoRef.current.play().catch(e => console.log('Live preview play error:', e));
       }
 
-      // Set up media recorder with selected format
-      let mimeType = formatOption.mimeType;
+      // Get best supported MIME type
+      const mimeType = getBestSupportedMimeType(formatOption.value);
       
-      // Fallback MIME types if the selected one isn't supported
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        if (formatOption.value.includes('mp4')) {
-          mimeType = 'video/webm; codecs=vp9';
-          toast.info("MP4 not supported, using WebM format instead");
-        } else if (isAudioOnly) {
-          mimeType = 'audio/webm; codecs=opus';
-          toast.info(`${formatOption.label} not supported, using WebM audio format instead`);
-        }
-      }
+      const recorderOptions: MediaRecorderOptions = {
+        mimeType,
+        videoBitsPerSecond: quality === 'ultra' ? 6000000 : 
+                           quality === 'high' ? 3000000 : 
+                           quality === 'medium' ? 1500000 : 500000
+      };
 
-      const recorder = new MediaRecorder(displayStream, { mimeType });
+      const recorder = new MediaRecorder(displayStream, recorderOptions);
       setMediaRecorder(recorder);
       
       // Reset chunks
@@ -147,17 +184,21 @@ const ScreenRecorder = () => {
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           recordingChunks.current.push(e.data);
+          console.log('Data chunk received:', e.data.size, 'bytes');
         }
       };
 
       // Handle recording stop
       recorder.onstop = () => {
+        console.log('Recording stopped, processing chunks...');
         // Clean up stream tracks
         displayStream.getTracks().forEach(track => track.stop());
         
         // Create recording entry
         if (recordingChunks.current.length > 0) {
           createRecordingEntry(recordingChunks.current, mimeType, formatOption);
+        } else {
+          toast.error('No recording data available');
         }
         
         setRecording(false);
@@ -170,14 +211,14 @@ const ScreenRecorder = () => {
         }
       };
 
-      // Start recording
-      recorder.start(100);
+      // Start recording with smaller time slices for better compatibility
+      recorder.start(1000);
       setRecording(true);
       toast.success(`Recording started in ${formatOption.label} format`);
       
     } catch (err) {
       console.error("Error starting screen recording:", err);
-      toast.error("Failed to start recording. Please try again.");
+      toast.error("Failed to start recording. Please check permissions and try again.");
     }
   };
 
@@ -205,7 +246,10 @@ const ScreenRecorder = () => {
   };
 
   const createRecordingEntry = (chunks: Blob[], mimeType: string, formatOption: any) => {
+    console.log('Creating recording entry with', chunks.length, 'chunks');
     const blob = new Blob(chunks, { type: mimeType });
+    console.log('Created blob:', blob.size, 'bytes, type:', blob.type);
+    
     const url = URL.createObjectURL(blob);
     const timestamp = new Date();
     
@@ -230,6 +274,13 @@ const ScreenRecorder = () => {
     if (recordedVideoRef.current && !isAudioOnly) {
       recordedVideoRef.current.src = url;
       recordedVideoRef.current.load();
+      // Add event listeners for better debugging
+      recordedVideoRef.current.onloadeddata = () => {
+        console.log('Video loaded successfully');
+      };
+      recordedVideoRef.current.onerror = (e) => {
+        console.error('Video loading error:', e);
+      };
     }
     
     setActiveTab('preview');
@@ -237,15 +288,47 @@ const ScreenRecorder = () => {
   };
 
   const downloadRecording = (recording: Recording) => {
-    const a = document.createElement('a');
-    a.href = recording.url;
-    a.download = `${recording.name}.${recording.format}`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      toast.success("Recording downloaded successfully!");
-    }, 100);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+      // Mobile-friendly download
+      try {
+        // Create a temporary anchor element
+        const link = document.createElement('a');
+        link.href = recording.url;
+        link.download = `${recording.name}.${recording.format}`;
+        
+        // For mobile browsers, open in new tab if direct download fails
+        link.target = '_blank';
+        
+        // Trigger download
+        document.body.appendChild(link);
+        link.click();
+        
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(link);
+        }, 100);
+        
+        toast.success("Download started! Check your Downloads folder.");
+      } catch (error) {
+        console.error('Mobile download error:', error);
+        // Fallback: open video in new tab
+        window.open(recording.url, '_blank');
+        toast.info("Video opened in new tab. Use browser menu to save.");
+      }
+    } else {
+      // Desktop download
+      const a = document.createElement('a');
+      a.href = recording.url;
+      a.download = `${recording.name}.${recording.format}`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        toast.success("Recording downloaded successfully!");
+      }, 100);
+    }
   };
 
   const deleteRecording = (id: string) => {
@@ -261,7 +344,11 @@ const ScreenRecorder = () => {
 
   const previewRecording = (recording: Recording) => {
     setRecordedVideoUrl(recording.url);
-    if (recordedVideoRef.current && !recording.format.includes('wav')) {
+    const isAudioOnly = recording.format.includes('wav') || 
+                       recording.format.includes('mp3') || 
+                       recording.format.includes('ogg');
+    
+    if (recordedVideoRef.current && !isAudioOnly) {
       recordedVideoRef.current.src = recording.url;
       recordedVideoRef.current.load();
     }
@@ -341,6 +428,7 @@ const ScreenRecorder = () => {
                             autoPlay 
                             muted
                             playsInline
+                            onError={(e) => console.error('Live preview error:', e)}
                           >
                             Your browser doesn't support video playback.
                           </video>
@@ -473,6 +561,14 @@ const ScreenRecorder = () => {
                         style={{ maxHeight: "500px" }}
                         controls
                         preload="metadata"
+                        playsInline
+                        onError={(e) => {
+                          console.error('Recorded video error:', e);
+                          toast.error('Error loading video preview');
+                        }}
+                        onLoadedData={() => {
+                          console.log('Recorded video loaded successfully');
+                        }}
                       >
                         Your browser doesn't support video playback.
                       </video>
@@ -483,6 +579,10 @@ const ScreenRecorder = () => {
                           <p className="text-muted-foreground">
                             Audio recording completed - {getSelectedFormatOption().label}
                           </p>
+                          <audio controls className="mt-4">
+                            <source src={recordedVideoUrl} />
+                            Your browser doesn't support audio playback.
+                          </audio>
                         </div>
                       </div>
                     )}
