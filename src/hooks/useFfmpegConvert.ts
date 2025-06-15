@@ -1,4 +1,3 @@
-
 import { useRef, useState } from "react";
 
 export interface FfmpegConvertState {
@@ -48,7 +47,7 @@ export function useFfmpegConvert() {
     }
 
     if (!ffmpegRef.current) {
-      ffmpegRef.current = createFFmpeg({ log: false });
+      ffmpegRef.current = createFFmpeg({ log: true }); // Turn on FFmpeg logs
     }
     const ffmpeg = ffmpegRef.current;
 
@@ -67,25 +66,36 @@ export function useFfmpegConvert() {
       // Write input file
       ffmpeg.FS('writeFile', 'input.webm', await fetchFile(inputBlob));
 
-      // Run the conversion command with settings for high compatibility (e.g., for WhatsApp)
+      // --- Key WhatsApp-friendly command: ---
+      // - shorter/standardized, only basic flags
+      // - important to produce baseline H.264/AAC @ correct audio specs
       await ffmpeg.run(
-        "-i", "input.webm",          // Input file
-        "-c:v", "libx264",            // Video codec: H.264
-        "-profile:v", "baseline",     // H.264 profile for broad compatibility
-        "-level", "3.0",              // H.264 level
-        "-preset", "medium",          // Encoding speed vs. compression balance
-        "-crf", "23",                 // Constant Rate Factor for quality (lower is better)
-        "-c:a", "aac",                // Audio codec: AAC
-        "-b:a", "128k",               // Audio bitrate
-        "-movflags", "+faststart",    // Move metadata to the start for faster playback
-        "-pix_fmt", "yuv420p",        // Pixel format for maximum compatibility
-        "output.mp4"                  // Output file
+        "-i", "input.webm",
+        // Video
+        "-c:v", "libx264",
+        "-profile:v", "baseline",
+        "-level", "3.0",
+        "-pix_fmt", "yuv420p",
+        "-preset", "veryfast",
+        "-r", "30", // Force 30 fps for compatibility
+        // Audio
+        "-c:a", "aac",
+        "-ac", "2",                 // Stereo
+        "-ar", "44100",             // Audio sample rate WhatsApp expects
+        "-b:a", "128k",             // Audio bitrate
+        // Container
+        "-movflags", "+faststart",  // Place moov atom at start
+        "output.mp4"
       );
 
       // Read the result
       const data = ffmpeg.FS("readFile", "output.mp4");
-      const mp4Blob = new Blob([data.buffer], { type: "video/mp4" });
+      // Use Uint8Array to ensure MP4 file compatibility
+      const mp4Blob = new Blob([new Uint8Array(data)], { type: "video/mp4" });
       const outputUrl = URL.createObjectURL(mp4Blob);
+
+      // Log debug info
+      console.log("[FFMPEG] Output MP4 size:", mp4Blob.size, "bytes");
 
       setState({
         loading: false,
@@ -106,6 +116,8 @@ export function useFfmpegConvert() {
         error: (err && err.message) || "FFmpeg conversion failed",
         outputUrl: null,
       });
+      // Log error for debugging
+      console.error("FFmpeg conversion error:", err);
       return null;
     }
   };
