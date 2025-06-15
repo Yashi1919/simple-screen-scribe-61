@@ -189,25 +189,29 @@ const ScreenRecorder = () => {
         ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
       }
 
-      // Draw webcam overlay - clear and prominent
+      // Draw webcam overlay - smaller but crystal clear
       if (webcamStream && webcamVideo.readyState >= 2) {
-        const webcamWidth = 400; // Larger size
-        const webcamHeight = 300; // Larger size
+        const webcamWidth = 240; // Smaller, back to reasonable size
+        const webcamHeight = 180; // Smaller, back to reasonable size
         const x = canvas.width - webcamWidth - 20;
         const y = canvas.height - webcamHeight - 20;
         
-        // Draw webcam video directly without any background effects
+        // Add black background for better contrast
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(x - 4, y - 4, webcamWidth + 8, webcamHeight + 8);
+        
+        // Draw webcam video with high clarity
         ctx.drawImage(webcamVideo, x, y, webcamWidth, webcamHeight);
         
-        // Add a clean border for definition
+        // Add bright white border for maximum visibility
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 6;
         ctx.strokeRect(x, y, webcamWidth, webcamHeight);
         
-        // Add a subtle outer border for better contrast
+        // Add secondary border for even more contrast
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 2;
-        ctx.strokeRect(x - 2, y - 2, webcamWidth + 4, webcamHeight + 4);
+        ctx.strokeRect(x - 3, y - 3, webcamWidth + 6, webcamHeight + 6);
       }
 
       animationFrameRef.current = requestAnimationFrame(drawFrame);
@@ -767,9 +771,9 @@ const ScreenRecorder = () => {
                             Your browser doesn't support video playback.
                           </video>
                           
-                          {/* Webcam Overlay - Clear and prominent */}
+                          {/* Webcam Overlay - Smaller but crystal clear */}
                           {webcamEnabled && webcamStream && (
-                            <div className="absolute bottom-4 right-4 w-48 h-36 bg-black rounded-lg overflow-hidden border-4 border-white shadow-2xl">
+                            <div className="absolute bottom-4 right-4 w-32 h-24 bg-black rounded-lg overflow-hidden border-4 border-white shadow-2xl">
                               <video
                                 ref={webcamVideoRef}
                                 className="w-full h-full object-cover"
