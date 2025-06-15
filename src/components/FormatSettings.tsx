@@ -24,8 +24,8 @@ interface FormatSettingsProps {
 
 // MP4 added back as a selectable format
 const rawFormatOptions: FormatOption[] = [
-  { value: 'mp4-h264', label: 'MP4 (H.264)', mimeType: 'video/mp4', extension: 'mp4', quality: 'high' },
-  { value: 'webm-generic', label: 'WebM (WhatsApp, File Safe)', mimeType: 'video/webm', extension: 'webm', quality: 'high' },
+  { value: 'mp4-h264', label: 'Linkedin Compatible', mimeType: 'video/mp4', extension: 'mp4', quality: 'high' },
+  { value: 'webm-generic', label: 'Whats Compatible (WhatsApp, File Safe)', mimeType: 'video/webm', extension: 'webm', quality: 'high' },
   { value: 'webm-vp9', label: 'WebM (VP9)', mimeType: 'video/webm; codecs=vp9', extension: 'webm', quality: 'high' },
   { value: 'webm-vp8', label: 'WebM (VP8)', mimeType: 'video/webm; codecs=vp8', extension: 'webm', quality: 'medium' },
   { value: 'mkv', label: 'MKV', mimeType: 'video/x-matroska', extension: 'mkv', quality: 'high' },
@@ -128,7 +128,7 @@ const FormatSettings = ({
             </span>
             <br />
             <span>
-              <b>WebM (WhatsApp, File Safe)</b> is recommended for <b>WhatsApp</b> uploads and works on most browsers and devices.
+              <b>WhatsApp, File Safe</b> is recommended for <b>WhatsApp</b> uploads and works on most browsers and devices.
             </span>
             <br />
             If your browser does not support direct MP4 recording, pick WebM and use the "Convert to MP4" button after recording for LinkedIn compatibility.
