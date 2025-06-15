@@ -115,8 +115,8 @@ const ScreenRecorder = () => {
     try {
       const webcamStream = await navigator.mediaDevices.getUserMedia({
         video: { 
-          width: { ideal: 640 }, 
-          height: { ideal: 480 },
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 },
           facingMode: 'user'
         },
         audio: false
@@ -189,29 +189,25 @@ const ScreenRecorder = () => {
         ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
       }
 
-      // Draw webcam overlay (larger and clearer)
+      // Draw webcam overlay - clear and prominent
       if (webcamStream && webcamVideo.readyState >= 2) {
-        const webcamWidth = 320; // Increased from 160
-        const webcamHeight = 240; // Increased from 120
-        const x = canvas.width - webcamWidth - 30;
-        const y = canvas.height - webcamHeight - 30;
+        const webcamWidth = 400; // Larger size
+        const webcamHeight = 300; // Larger size
+        const x = canvas.width - webcamWidth - 20;
+        const y = canvas.height - webcamHeight - 20;
         
-        // Add a more prominent border/shadow effect
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(x - 5, y - 5, webcamWidth + 10, webcamHeight + 10);
-        
-        // Add white border for better visibility
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x - 2, y - 2, webcamWidth + 4, webcamHeight + 4);
-        
-        // Draw the webcam video with better quality
+        // Draw webcam video directly without any background effects
         ctx.drawImage(webcamVideo, x, y, webcamWidth, webcamHeight);
         
-        // Add a subtle rounded corner effect
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.lineWidth = 2;
+        // Add a clean border for definition
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
         ctx.strokeRect(x, y, webcamWidth, webcamHeight);
+        
+        // Add a subtle outer border for better contrast
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 2, y - 2, webcamWidth + 4, webcamHeight + 4);
       }
 
       animationFrameRef.current = requestAnimationFrame(drawFrame);
@@ -771,9 +767,9 @@ const ScreenRecorder = () => {
                             Your browser doesn't support video playback.
                           </video>
                           
-                          {/* Webcam Overlay - Larger and clearer */}
+                          {/* Webcam Overlay - Clear and prominent */}
                           {webcamEnabled && webcamStream && (
-                            <div className="absolute bottom-4 right-4 w-40 h-30 bg-black rounded-lg overflow-hidden border-4 border-white shadow-2xl">
+                            <div className="absolute bottom-4 right-4 w-48 h-36 bg-black rounded-lg overflow-hidden border-4 border-white shadow-2xl">
                               <video
                                 ref={webcamVideoRef}
                                 className="w-full h-full object-cover"
@@ -828,8 +824,8 @@ const ScreenRecorder = () => {
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="font-medium">High-Quality Webcam Overlay</h4>
-                          <p className="text-sm text-muted-foreground">Add clear webcam overlay to recording</p>
+                          <h4 className="font-medium">Crystal Clear Webcam Overlay</h4>
+                          <p className="text-sm text-muted-foreground">Add high-definition webcam overlay to recording</p>
                         </div>
                         <Switch 
                           checked={webcamEnabled} 
