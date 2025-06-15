@@ -45,6 +45,8 @@ const ScreenRecorder = () => {
   const recordedVideoRef = useRef<HTMLVideoElement>(null);
   const webcamVideoRef = useRef<HTMLVideoElement>(null);
   const recordingChunks = useRef<Blob[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationFrameRef = useRef<number>();
 
   // Check browser compatibility
   useEffect(() => {
@@ -120,11 +122,8 @@ const ScreenRecorder = () => {
         audio: false
       });
       setWebcamStream(webcamStream);
-      // Only set srcObject if it changed to avoid unnecessary render/loop
       if (webcamVideoRef.current) {
-        if (webcamVideoRef.current.srcObject !== webcamStream) {
-          webcamVideoRef.current.srcObject = webcamStream;
-        }
+        webcamVideoRef.current.srcObject = webcamStream;
         webcamVideoRef.current.play().catch(e => console.log("Webcam video play error:", e));
       }
       console.log("Webcam started, stream tracks:", webcamStream.getTracks());
@@ -153,9 +152,72 @@ const ScreenRecorder = () => {
     } else {
       stopWebcam();
     }
-    // webcamEnabled only
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [webcamEnabled]);
+
+  // Canvas composition for mixing screen + webcam
+  const startCanvasComposition = (screenStream: MediaStream, webcamStream: MediaStream | null) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Set canvas size to match screen recording resolution
+    canvas.width = 1280;
+    canvas.height = 720;
+
+    // Create video elements for drawing
+    const screenVideo = document.createElement('video');
+    const webcamVideo = document.createElement('video');
+
+    screenVideo.srcObject = screenStream;
+    screenVideo.muted = true;
+    screenVideo.play();
+
+    if (webcamStream) {
+      webcamVideo.srcObject = webcamStream;
+      webcamVideo.muted = true;
+      webcamVideo.play();
+    }
+
+    const drawFrame = () => {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw screen capture (full canvas)
+      if (screenVideo.readyState >= 2) {
+        ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+      }
+
+      // Draw webcam overlay (bottom-right corner)
+      if (webcamStream && webcamVideo.readyState >= 2) {
+        const webcamWidth = 160;
+        const webcamHeight = 120;
+        const x = canvas.width - webcamWidth - 20;
+        const y = canvas.height - webcamHeight - 20;
+        
+        // Add border/shadow effect
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(x - 2, y - 2, webcamWidth + 4, webcamHeight + 4);
+        
+        ctx.drawImage(webcamVideo, x, y, webcamWidth, webcamHeight);
+      }
+
+      animationFrameRef.current = requestAnimationFrame(drawFrame);
+    };
+
+    drawFrame();
+
+    // Return the canvas stream
+    return canvas.captureStream(30);
+  };
+
+  const stopCanvasComposition = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -180,13 +242,28 @@ const ScreenRecorder = () => {
       };
 
       const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
-      setStream(displayStream);
-
-      // Only set srcObject if not already set, to avoid unnecessary rerender
-      if (liveVideoRef.current && !isAudioOnly) {
-        if (liveVideoRef.current.srcObject !== displayStream) {
-          liveVideoRef.current.srcObject = displayStream;
+      
+      // Create composite stream if webcam is enabled
+      let recordingStream = displayStream;
+      if (webcamEnabled && webcamStream && !isAudioOnly) {
+        const canvasStream = startCanvasComposition(displayStream, webcamStream);
+        if (canvasStream) {
+          // Add audio tracks from display stream to canvas stream
+          if (includeAudio) {
+            displayStream.getAudioTracks().forEach(track => {
+              canvasStream.addTrack(track);
+            });
+          }
+          recordingStream = canvasStream;
+          console.log("Using composite stream with webcam overlay");
         }
+      }
+
+      setStream(displayStream); // Keep display stream for live preview
+
+      // Set up live preview (always use display stream for preview)
+      if (liveVideoRef.current && !isAudioOnly) {
+        liveVideoRef.current.srcObject = displayStream;
         liveVideoRef.current.play().catch(e => console.log('Live preview play error:', e));
         console.log("Live preview started, display stream tracks:", displayStream.getTracks());
       }
@@ -225,7 +302,8 @@ const ScreenRecorder = () => {
         audioBitsPerSecond: 128000
       };
 
-      const recorder = new MediaRecorder(displayStream, recorderOptions);
+      // Use the composite stream for recording
+      const recorder = new MediaRecorder(recordingStream, recorderOptions);
       setMediaRecorder(recorder);
       
       recordingChunks.current = [];
@@ -240,6 +318,7 @@ const ScreenRecorder = () => {
       recorder.onstop = () => {
         console.log('Recording stopped, processing chunks...');
         displayStream.getTracks().forEach(track => track.stop());
+        stopCanvasComposition();
         
         if (recordingChunks.current.length > 0) {
           createRecordingEntry(recordingChunks.current, mimeType, formatOption);
@@ -259,7 +338,9 @@ const ScreenRecorder = () => {
       recorder.start(1000); // Use 1 second chunks for better stability
       setRecording(true);
 
-      if (formatOption.value === 'mp4-h264' && isFormatSupported('mp4-h264')) {
+      if (webcamEnabled) {
+        toast.success("Recording started with webcam overlay included in video");
+      } else if (formatOption.value === 'mp4-h264' && isFormatSupported('mp4-h264')) {
         toast.success("Recording started in MP4 format");
       } else if (mimeType.includes('webm')) {
         toast.success("Recording started in WebM format");
@@ -607,6 +688,9 @@ const ScreenRecorder = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4">
+      {/* Hidden canvas for video composition */}
+      <canvas ref={canvasRef} className="hidden" />
+      
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
