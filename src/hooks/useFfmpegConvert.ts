@@ -1,3 +1,4 @@
+
 import { useRef, useState } from "react";
 
 export interface FfmpegConvertState {
@@ -8,7 +9,7 @@ export interface FfmpegConvertState {
 }
 
 export function useFfmpegConvert() {
-  const ffmpegRef = useRef<any>(null); // We don't know the module shape until import
+  const ffmpegRef = useRef<any>(null); // FFmpeg WebAssembly module instance
   const [state, setState] = useState<FfmpegConvertState>({
     loading: false,
     progress: 0,
@@ -25,10 +26,9 @@ export function useFfmpegConvert() {
       outputUrl: null,
     });
 
-    // Correct dynamic import handling for ESM/CJS.
+    // Dynamic import of FFmpeg
     const ffmpegModule = await import("@ffmpeg/ffmpeg");
 
-    // Support both ESM and CJS shapes
     const createFFmpeg =
       (ffmpegModule as any).createFFmpeg ||
       (ffmpegModule as any).default?.createFFmpeg;
@@ -47,7 +47,13 @@ export function useFfmpegConvert() {
     }
 
     if (!ffmpegRef.current) {
-      ffmpegRef.current = createFFmpeg({ log: true }); // Turn on FFmpeg logs
+      ffmpegRef.current = createFFmpeg({
+        log: true,
+        logger: ({ type, message }: { type: string; message: string }) => {
+          // Forward ffmpeg logs to browser console for debugging
+          console.log(`[FFMPEG] [${type}] ${message}`);
+        },
+      });
     }
     const ffmpeg = ffmpegRef.current;
 
@@ -63,38 +69,42 @@ export function useFfmpegConvert() {
     });
 
     try {
-      // Write input file
       ffmpeg.FS('writeFile', 'input.webm', await fetchFile(inputBlob));
 
-      // --- Key WhatsApp-friendly command: ---
-      // - shorter/standardized, only basic flags
-      // - important to produce baseline H.264/AAC @ correct audio specs
+      // SIMPLIFIED, STRICT MP4/WhatsApp FRIENDLY COMMAND:
       await ffmpeg.run(
+        "-fflags", "+genpts",
         "-i", "input.webm",
-        // Video
         "-c:v", "libx264",
         "-profile:v", "baseline",
         "-level", "3.0",
-        "-pix_fmt", "yuv420p",
         "-preset", "veryfast",
-        "-r", "30", // Force 30 fps for compatibility
-        // Audio
+        "-r", "30",
+        "-b:v", "2000k",
+        "-pix_fmt", "yuv420p",
         "-c:a", "aac",
-        "-ac", "2",                 // Stereo
-        "-ar", "44100",             // Audio sample rate WhatsApp expects
-        "-b:a", "128k",             // Audio bitrate
-        // Container
-        "-movflags", "+faststart",  // Place moov atom at start
+        "-b:a", "128k",
+        "-ac", "2",
+        "-ar", "44100",
+        "-movflags", "+faststart",
         "output.mp4"
       );
 
-      // Read the result
+      // Debug: check output file metadata
+      try {
+        const ffprobeOut = await ffmpeg.run(
+          "-i", "output.mp4",
+          "-hide_banner"
+        );
+        console.log("[FFMPEG] Output MP4 ffprobe:", ffprobeOut);
+      } catch (probeError) {
+        console.warn("[FFMPEG] ffprobe failed", probeError);
+      }
+
       const data = ffmpeg.FS("readFile", "output.mp4");
-      // Use Uint8Array to ensure MP4 file compatibility
       const mp4Blob = new Blob([new Uint8Array(data)], { type: "video/mp4" });
       const outputUrl = URL.createObjectURL(mp4Blob);
 
-      // Log debug info
       console.log("[FFMPEG] Output MP4 size:", mp4Blob.size, "bytes");
 
       setState({
@@ -104,7 +114,6 @@ export function useFfmpegConvert() {
         outputUrl,
       });
 
-      // Clean up files in the FS to avoid memory leaks
       ffmpeg.FS("unlink", "input.webm");
       ffmpeg.FS("unlink", "output.mp4");
 
@@ -116,7 +125,6 @@ export function useFfmpegConvert() {
         error: (err && err.message) || "FFmpeg conversion failed",
         outputUrl: null,
       });
-      // Log error for debugging
       console.error("FFmpeg conversion error:", err);
       return null;
     }
@@ -141,3 +149,4 @@ export function useFfmpegConvert() {
     cleanUp,
   };
 }
+
