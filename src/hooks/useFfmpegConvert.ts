@@ -67,15 +67,19 @@ export function useFfmpegConvert() {
       // Write input file
       ffmpeg.FS('writeFile', 'input.webm', await fetchFile(inputBlob));
 
-      // Run the conversion command
+      // Run the conversion command with settings for high compatibility (e.g., for WhatsApp)
       await ffmpeg.run(
-        "-i", "input.webm",
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-c:a", "aac",
-        "-movflags", "faststart",
-        "-pix_fmt", "yuv420p",
-        "output.mp4"
+        "-i", "input.webm",          // Input file
+        "-c:v", "libx264",            // Video codec: H.264
+        "-profile:v", "baseline",     // H.264 profile for broad compatibility
+        "-level", "3.0",              // H.264 level
+        "-preset", "medium",          // Encoding speed vs. compression balance
+        "-crf", "23",                 // Constant Rate Factor for quality (lower is better)
+        "-c:a", "aac",                // Audio codec: AAC
+        "-b:a", "128k",               // Audio bitrate
+        "-movflags", "+faststart",    // Move metadata to the start for faster playback
+        "-pix_fmt", "yuv420p",        // Pixel format for maximum compatibility
+        "output.mp4"                  // Output file
       );
 
       // Read the result
@@ -125,4 +129,3 @@ export function useFfmpegConvert() {
     cleanUp,
   };
 }
-
