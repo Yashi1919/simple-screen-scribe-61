@@ -592,6 +592,19 @@ const ScreenRecorder = () => {
     }
   }, [convertedMp4Url]);
 
+  // Ensure webcam video overlay always gets the latest webcamStream as srcObject
+  useEffect(() => {
+    if (webcamEnabled && webcamStream && webcamVideoRef.current) {
+      if (webcamVideoRef.current.srcObject !== webcamStream) {
+        webcamVideoRef.current.srcObject = webcamStream;
+      }
+    }
+    // If webcam is off, clear it
+    if (!webcamEnabled && webcamVideoRef.current) {
+      webcamVideoRef.current.srcObject = null;
+    }
+  }, [webcamStream, webcamEnabled]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4">
       <div className="max-w-7xl mx-auto">
