@@ -189,29 +189,38 @@ const ScreenRecorder = () => {
         ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
       }
 
-      // Draw webcam overlay - smaller but crystal clear
+      // Draw webcam overlay - HIGHLY VISIBLE AND CLEAR
       if (webcamStream && webcamVideo.readyState >= 2) {
-        const webcamWidth = 240; // Smaller, back to reasonable size
-        const webcamHeight = 180; // Smaller, back to reasonable size
+        const webcamWidth = 240;
+        const webcamHeight = 180;
         const x = canvas.width - webcamWidth - 20;
         const y = canvas.height - webcamHeight - 20;
         
-        // Add black background for better contrast
+        // Add thick black shadow background for maximum contrast
         ctx.fillStyle = '#000000';
+        ctx.fillRect(x - 8, y - 8, webcamWidth + 16, webcamHeight + 16);
+        
+        // Add white background for extra contrast
+        ctx.fillStyle = '#ffffff';
         ctx.fillRect(x - 4, y - 4, webcamWidth + 8, webcamHeight + 8);
         
-        // Draw webcam video with high clarity
+        // Draw webcam video with maximum clarity
         ctx.drawImage(webcamVideo, x, y, webcamWidth, webcamHeight);
         
-        // Add bright white border for maximum visibility
+        // Add THICK bright white border for maximum visibility
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 8;
         ctx.strokeRect(x, y, webcamWidth, webcamHeight);
         
-        // Add secondary border for even more contrast
+        // Add thick black outer border for ultimate contrast
         ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(x - 6, y - 6, webcamWidth + 12, webcamHeight + 12);
+        
+        // Add inner bright yellow accent for extra visibility
+        ctx.strokeStyle = '#ffff00';
         ctx.lineWidth = 2;
-        ctx.strokeRect(x - 3, y - 3, webcamWidth + 6, webcamHeight + 6);
+        ctx.strokeRect(x + 2, y + 2, webcamWidth - 4, webcamHeight - 4);
       }
 
       animationFrameRef.current = requestAnimationFrame(drawFrame);
@@ -350,7 +359,7 @@ const ScreenRecorder = () => {
       setRecording(true);
 
       if (webcamEnabled) {
-        toast.success("Recording started with high-quality webcam overlay");
+        toast.success("Recording started with ultra-clear webcam overlay");
       } else if (formatOption.value === 'mp4-h264' && isFormatSupported('mp4-h264')) {
         toast.success("Recording started in MP4 format");
       } else if (mimeType.includes('webm')) {
@@ -771,7 +780,7 @@ const ScreenRecorder = () => {
                             Your browser doesn't support video playback.
                           </video>
                           
-                          {/* Webcam Overlay - Smaller but crystal clear */}
+                          {/* Webcam Overlay - Ultra visible */}
                           {webcamEnabled && webcamStream && (
                             <div className="absolute bottom-4 right-4 w-32 h-24 bg-black rounded-lg overflow-hidden border-4 border-white shadow-2xl">
                               <video
@@ -828,8 +837,8 @@ const ScreenRecorder = () => {
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="font-medium">Crystal Clear Webcam Overlay</h4>
-                          <p className="text-sm text-muted-foreground">Add high-definition webcam overlay to recording</p>
+                          <h4 className="font-medium">Ultra-Clear Webcam Overlay</h4>
+                          <p className="text-sm text-muted-foreground">Add highly visible webcam overlay to recording</p>
                         </div>
                         <Switch 
                           checked={webcamEnabled} 
