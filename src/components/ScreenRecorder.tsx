@@ -377,49 +377,70 @@ const ScreenRecorder = () => {
     toast.success("Recording ready for preview!");
   };
 
-  const downloadRecording = (recording: Recording) => {
+  const downloadRecording = async (recording: Recording) => {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
+
     // Only offer .mp4 if it's truly mp4, else fallback to .webm
     let fileName = `${recording.name.replace(/[^a-zA-Z0-9]/g, '_')}.${recording.format}`;
     if (recording.format === "mp4" && !trueMp4Supported()) {
-      // prevent fake .mp4 download
       fileName = `${recording.name.replace(/[^a-zA-Z0-9]/g, '_')}.webm`;
       toast.error("Recording is actually WebM, not MP4. WhatsApp may not accept it.");
     }
 
-    if (isMobile) {
-      // Mobile-friendly download with WhatsApp sharing hint
-      try {
-        const link = document.createElement('a');
-        link.href = recording.url;
-        link.download = fileName;
-        link.target = '_blank';
-        
-        document.body.appendChild(link);
-        link.click();
-        
-        setTimeout(() => {
-          document.body.removeChild(link);
-        }, 100);
-        
-        toast.success("Video downloaded! You can now share it on WhatsApp from your gallery/downloads.");
-      } catch (error) {
-        console.error('Mobile download error:', error);
-        window.open(recording.url, '_blank');
-        toast.info("Video opened in new tab. Save it and share on WhatsApp from your gallery.");
+    try {
+      // Added block: Check Blob content for debugging
+      const response = await fetch(recording.url);
+      const blob = await response.blob();
+      console.log("DOWNLOAD: Blob size:", blob.size, "type:", blob.type, "expected format:", recording.format);
+      if (blob.size === 0) {
+        toast.error("Cannot download video – file is empty. Please try recording again.");
+        return;
       }
-    } else {
-      // Desktop download
-      const a = document.createElement('a');
-      a.href = recording.url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        toast.success("WhatsApp-compatible video downloaded successfully!");
-      }, 100);
+      if (!blob.type.includes("mp4") && recording.format === "mp4") {
+        toast.error("Warning: This MP4 may not be valid! (MIME type: " + blob.type + ")");
+      }
+
+      if (isMobile) {
+        // Mobile-friendly download workaround using File and anchor
+        try {
+          // Force use of File for name
+          const arrayBuffer = await blob.arrayBuffer();
+          const file = new File([arrayBuffer], fileName, { type: blob.type || 'video/mp4' });
+          const tempUrl = URL.createObjectURL(file);
+          const a = document.createElement("a");
+          a.href = tempUrl;
+          a.download = fileName;
+          a.target = "_blank";
+
+          document.body.appendChild(a);
+          a.click();
+
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(tempUrl);
+          }, 1500);
+
+          toast.success("Video downloaded! You can now share it on WhatsApp from your gallery/downloads.");
+        } catch (error) {
+          console.error('Mobile download, File workaround error:', error);
+          window.open(recording.url, '_blank');
+          toast.info("Video opened in new tab. Save it and share on WhatsApp from your gallery.");
+        }
+      } else {
+        // Desktop download, unchanged
+        const a = document.createElement('a');
+        a.href = recording.url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          toast.success("WhatsApp-compatible video downloaded successfully!");
+        }, 100);
+      }
+    } catch (err) {
+      console.error("Download handler error:", err);
+      toast.error("There was an error when preparing your video for download. Try recording and converting again.");
     }
   };
 
