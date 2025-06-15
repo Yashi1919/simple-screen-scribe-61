@@ -39,6 +39,7 @@ const ScreenRecorder = () => {
   const [videoLoading, setVideoLoading] = useState(false);
   const [convertingMp4, setConvertingMp4] = useState(false);
   const [convertedMp4Url, setConvertedMp4Url] = useState<string | null>(null);
+  const [mp4Duration, setMp4Duration] = useState<number | null>(null);
 
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const recordedVideoRef = useRef<HTMLVideoElement>(null);
@@ -528,6 +529,22 @@ const ScreenRecorder = () => {
     };
   }, [convertedMp4Url, cleanUpFfmpeg]);
 
+  // Helper - check for .mp4 duration "00:00" using video element (after setConvertedMp4Url)
+  useEffect(() => {
+    if (convertedMp4Url) {
+      const v = document.createElement('video');
+      v.src = convertedMp4Url;
+      v.onloadedmetadata = () => {
+        setMp4Duration(v.duration);
+      };
+      v.onerror = () => {
+        setMp4Duration(null);
+      };
+    } else {
+      setMp4Duration(null);
+    }
+  }, [convertedMp4Url]);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 p-4">
       <div className="max-w-7xl mx-auto">
@@ -706,30 +723,41 @@ const ScreenRecorder = () => {
                     <CardTitle className="flex items-center justify-between">
                       <span>Recorded Video Preview</span>
                       <div className="flex gap-2">
-                        {/* If the video is in "webm pretending to be mp4" or webm, show convert button */}
+                        {/* Download WebM option */}
+                        {!isAudioOnlyFormat() && (
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              const a = document.createElement('a');
+                              a.href = recordedVideoUrl;
+                              a.download = `ScreenRecording_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+                              document.body.appendChild(a);
+                              a.click();
+                              setTimeout(() => document.body.removeChild(a), 100);
+                            }}
+                          >
+                            Download WebM
+                          </Button>
+                        )}
+                        {/* Convert/Download MP4 if available */}
                         {!isAudioOnlyFormat() && (
                           <>
-                            {(
-                              getSelectedFormatOption().extension === "webm" ||
-                              (getSelectedFormatOption().extension === "mp4" && !trueMp4Supported())
-                            ) && (
-                              <Button
-                                onClick={handleConvertToMp4}
-                                disabled={convertingMp4 || ffmpegLoading}
-                                variant="secondary"
-                              >
-                                {ffmpegLoading || convertingMp4 ? (
-                                  <span>
-                                    Converting... {ffmpegProgress ? `${ffmpegProgress}%` : ""}
-                                  </span>
-                                ) : (
-                                  <span>Convert to MP4</span>
-                                )}
-                              </Button>
-                            )}
+                            <Button
+                              onClick={handleConvertToMp4}
+                              disabled={convertingMp4 || ffmpegLoading}
+                              variant="secondary"
+                            >
+                              {ffmpegLoading || convertingMp4 ? (
+                                <span>
+                                  Converting... {ffmpegProgress ? `${ffmpegProgress}%` : ""}
+                                </span>
+                              ) : (
+                                <span>Convert to MP4</span>
+                              )}
+                            </Button>
                           </>
                         )}
-                        {/* Download button for original */}
+                        {/* Download original (current) file */}
                         <Button onClick={() => downloadRecording({
                           id: 'current',
                           name: `Screen Recording ${new Date().toLocaleDateString()}`,
@@ -746,6 +774,28 @@ const ScreenRecorder = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
+                    {/* MP4 conversion warning for 00:00 duration */}
+                    {convertedMp4Url && (
+                      <div className="mb-2 rounded border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
+                        <strong>Notice:</strong> MP4 file may show <b>duration as 00:00</b> or fail to play in some players and WhatsApp. This is a known browser FFmpeg limitation.<br />
+                        <span>If you see this, <b>please convert the WebM on your Desktop</b> using the official FFmpeg tool for full compatibility.</span>
+                        <div className="mt-2">
+                          <span className="block font-mono bg-gray-100 rounded px-2 py-1 text-[90%]">
+                            ffmpeg -i input.webm -c:v libx264 -c:a aac -ac 2 -movflags +faststart output.mp4
+                          </span>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            <b>How to:</b> Install FFmpeg (<a className="underline" href="https://ffmpeg.org/download.html" target="_blank">download here</a>), open a terminal/cmd, and run this command in the folder with your WebM file.
+                          </div>
+                        </div>
+                        {/* Show duration check */}
+                        {(mp4Duration !== null && mp4Duration < 1) && (
+                          <div className="mt-2 text-red-700 text-xs font-medium">
+                            Detected MP4 duration = 00:00<br />
+                            This file won't work on WhatsApp. Please use desktop FFmpeg for conversion.
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {ffmpegError && (
                       <div className="mb-2 p-2 bg-destructive/10 text-destructive rounded">
                         <p className="text-xs">{ffmpegError}</p>
