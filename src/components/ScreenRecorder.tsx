@@ -120,10 +120,14 @@ const ScreenRecorder = () => {
         audio: false
       });
       setWebcamStream(webcamStream);
+      // Only set srcObject if it changed to avoid unnecessary render/loop
       if (webcamVideoRef.current) {
-        webcamVideoRef.current.srcObject = webcamStream;
-        webcamVideoRef.current.play();
+        if (webcamVideoRef.current.srcObject !== webcamStream) {
+          webcamVideoRef.current.srcObject = webcamStream;
+        }
+        webcamVideoRef.current.play().catch(e => console.log("Webcam video play error:", e));
       }
+      console.log("Webcam started, stream tracks:", webcamStream.getTracks());
     } catch (err) {
       console.error("Error accessing webcam:", err);
       toast.error("Failed to access webcam");
@@ -135,18 +139,22 @@ const ScreenRecorder = () => {
     if (webcamStream) {
       webcamStream.getTracks().forEach(track => track.stop());
       setWebcamStream(null);
+      console.log("Webcam stopped");
     }
     if (webcamVideoRef.current) {
       webcamVideoRef.current.srcObject = null;
     }
   };
 
+  // This effect properly enables/disables webcam when the toggle changes.
   useEffect(() => {
     if (webcamEnabled) {
       startWebcam();
     } else {
       stopWebcam();
     }
+    // webcamEnabled only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [webcamEnabled]);
 
   const startRecording = async () => {
@@ -174,9 +182,13 @@ const ScreenRecorder = () => {
       const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       setStream(displayStream);
 
+      // Only set srcObject if not already set, to avoid unnecessary rerender
       if (liveVideoRef.current && !isAudioOnly) {
-        liveVideoRef.current.srcObject = displayStream;
+        if (liveVideoRef.current.srcObject !== displayStream) {
+          liveVideoRef.current.srcObject = displayStream;
+        }
         liveVideoRef.current.play().catch(e => console.log('Live preview play error:', e));
+        console.log("Live preview started, display stream tracks:", displayStream.getTracks());
       }
 
       // Select requested mime type, fallback where necessary
@@ -560,7 +572,9 @@ const ScreenRecorder = () => {
       }
       cleanUpFfmpeg();
     };
-  }, [convertedMp4Url, cleanUpFfmpeg]);
+    // Only run on mount/unmount (no dependencies)
+    // eslint-disable-next-line
+  }, []); 
 
   // Helper - check for .mp4 duration "00:00" using video element (after setConvertedMp4Url)
   useEffect(() => {
