@@ -94,6 +94,21 @@ const ScreenRecorder = () => {
 
   const trueMp4Supported = () => false; // Always false - MP4 not recording any more
 
+  // Helper to check if selected format is supported natively for direct record
+  const isFormatSupported = (formatValue: string) => {
+    switch (formatValue) {
+      case "mp4-h264":
+        return MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') ||
+               MediaRecorder.isTypeSupported('video/mp4');
+      case "webm-vp9":
+        return MediaRecorder.isTypeSupported('video/webm; codecs=vp9');
+      case "webm-vp8":
+        return MediaRecorder.isTypeSupported('video/webm; codecs=vp8');
+      default:
+        return true;
+    }
+  };
+
   const startWebcam = async () => {
     try {
       const webcamStream = await navigator.mediaDevices.getUserMedia({
@@ -164,18 +179,30 @@ const ScreenRecorder = () => {
         liveVideoRef.current.play().catch(e => console.log('Live preview play error:', e));
       }
 
-      // Always use WebM or fallback
+      // Select requested mime type, fallback where necessary
       let mimeType = "";
-      if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
+      if (formatOption.value === "mp4-h264" && isFormatSupported("mp4-h264")) {
+        mimeType = 'video/mp4';
+      } else if (formatOption.value === "webm-vp9" && MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
         mimeType = 'video/webm; codecs=vp9';
-      } else if (MediaRecorder.isTypeSupported('video/webm; codecs=vp8')) {
+      } else if (formatOption.value === "webm-vp8" && MediaRecorder.isTypeSupported('video/webm; codecs=vp8')) {
         mimeType = 'video/webm; codecs=vp8';
+      } else if (MediaRecorder.isTypeSupported(formatOption.mimeType)) {
+        mimeType = formatOption.mimeType;
+      } else if (MediaRecorder.isTypeSupported('video/webm')) {
+        mimeType = 'video/webm';
       } else {
+        mimeType = '';
+      }
+
+      if ((formatOption.value === "mp4-h264") && !isFormatSupported("mp4-h264")) {
+        toast.error("MP4 direct recording is not supported in this browser. Recording as WebM instead. You can convert to MP4 after recording.");
         mimeType = 'video/webm';
       }
-      // Warn if someone expected MP4
-      if (formatOption.value === "mp4-h264") {
-        toast.error("MP4 direct recording is no longer available. Record in WebM and then convert.");
+
+      if (!mimeType) {
+        toast.error("No supported video format found in this browser.");
+        return;
       }
 
       const recorderOptions: MediaRecorderOptions = {
@@ -219,8 +246,14 @@ const ScreenRecorder = () => {
 
       recorder.start(1000); // Use 1 second chunks for better stability
       setRecording(true);
-      toast.success("Recording started in WebM format");
-      
+
+      if (formatOption.value === 'mp4-h264' && isFormatSupported('mp4-h264')) {
+        toast.success("Recording started in MP4 format");
+      } else if (mimeType.includes('webm')) {
+        toast.success("Recording started in WebM format");
+      } else {
+        toast.success("Recording started");
+      }
     } catch (err) {
       console.error("Error starting screen recording:", err);
       toast.error("Failed to start recording. Please check permissions and try again.");
