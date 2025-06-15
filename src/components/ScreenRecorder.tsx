@@ -115,8 +115,8 @@ const ScreenRecorder = () => {
     try {
       const webcamStream = await navigator.mediaDevices.getUserMedia({
         video: { 
-          width: { ideal: 320 }, 
-          height: { ideal: 240 },
+          width: { ideal: 640 }, 
+          height: { ideal: 480 },
           facingMode: 'user'
         },
         audio: false
@@ -163,8 +163,8 @@ const ScreenRecorder = () => {
     if (!ctx) return null;
 
     // Set canvas size to match screen recording resolution
-    canvas.width = 1280;
-    canvas.height = 720;
+    canvas.width = 1920;
+    canvas.height = 1080;
 
     // Create video elements for drawing
     const screenVideo = document.createElement('video');
@@ -189,18 +189,29 @@ const ScreenRecorder = () => {
         ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
       }
 
-      // Draw webcam overlay (bottom-right corner)
+      // Draw webcam overlay (larger and clearer)
       if (webcamStream && webcamVideo.readyState >= 2) {
-        const webcamWidth = 160;
-        const webcamHeight = 120;
-        const x = canvas.width - webcamWidth - 20;
-        const y = canvas.height - webcamHeight - 20;
+        const webcamWidth = 320; // Increased from 160
+        const webcamHeight = 240; // Increased from 120
+        const x = canvas.width - webcamWidth - 30;
+        const y = canvas.height - webcamHeight - 30;
         
-        // Add border/shadow effect
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(x - 2, y - 2, webcamWidth + 4, webcamHeight + 4);
+        // Add a more prominent border/shadow effect
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(x - 5, y - 5, webcamWidth + 10, webcamHeight + 10);
         
+        // Add white border for better visibility
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x - 2, y - 2, webcamWidth + 4, webcamHeight + 4);
+        
+        // Draw the webcam video with better quality
         ctx.drawImage(webcamVideo, x, y, webcamWidth, webcamHeight);
+        
+        // Add a subtle rounded corner effect
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, webcamWidth, webcamHeight);
       }
 
       animationFrameRef.current = requestAnimationFrame(drawFrame);
@@ -208,8 +219,8 @@ const ScreenRecorder = () => {
 
     drawFrame();
 
-    // Return the canvas stream
-    return canvas.captureStream(30);
+    // Return the canvas stream with higher frame rate for better quality
+    return canvas.captureStream(60);
   };
 
   const stopCanvasComposition = () => {
@@ -229,9 +240,9 @@ const ScreenRecorder = () => {
       let constraints: any = {
         video: !isAudioOnly ? {
           displaySurface: "monitor",
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 30 }
+          width: { ideal: 1920, max: 1920 },
+          height: { ideal: 1080, max: 1080 },
+          frameRate: { ideal: 60, max: 60 }
         } : false,
         audio: includeAudio ? {
           echoCancellation: true,
@@ -296,9 +307,9 @@ const ScreenRecorder = () => {
 
       const recorderOptions: MediaRecorderOptions = {
         mimeType,
-        videoBitsPerSecond: quality === 'ultra' ? 4000000 : 
-                           quality === 'high' ? 2500000 : 
-                           quality === 'medium' ? 1500000 : 800000,
+        videoBitsPerSecond: quality === 'ultra' ? 8000000 : 
+                           quality === 'high' ? 5000000 : 
+                           quality === 'medium' ? 3000000 : 1500000,
         audioBitsPerSecond: 128000
       };
 
@@ -339,7 +350,7 @@ const ScreenRecorder = () => {
       setRecording(true);
 
       if (webcamEnabled) {
-        toast.success("Recording started with webcam overlay included in video");
+        toast.success("Recording started with high-quality webcam overlay");
       } else if (formatOption.value === 'mp4-h264' && isFormatSupported('mp4-h264')) {
         toast.success("Recording started in MP4 format");
       } else if (mimeType.includes('webm')) {
@@ -760,9 +771,9 @@ const ScreenRecorder = () => {
                             Your browser doesn't support video playback.
                           </video>
                           
-                          {/* Webcam Overlay */}
+                          {/* Webcam Overlay - Larger and clearer */}
                           {webcamEnabled && webcamStream && (
-                            <div className="absolute bottom-4 right-4 w-32 h-24 bg-black rounded-lg overflow-hidden border-2 border-white shadow-lg">
+                            <div className="absolute bottom-4 right-4 w-40 h-30 bg-black rounded-lg overflow-hidden border-4 border-white shadow-2xl">
                               <video
                                 ref={webcamVideoRef}
                                 className="w-full h-full object-cover"
@@ -817,8 +828,8 @@ const ScreenRecorder = () => {
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="font-medium">Webcam Overlay</h4>
-                          <p className="text-sm text-muted-foreground">Add webcam to recording</p>
+                          <h4 className="font-medium">High-Quality Webcam Overlay</h4>
+                          <p className="text-sm text-muted-foreground">Add clear webcam overlay to recording</p>
                         </div>
                         <Switch 
                           checked={webcamEnabled} 
