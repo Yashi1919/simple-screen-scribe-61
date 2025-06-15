@@ -380,7 +380,6 @@ const ScreenRecorder = () => {
   const downloadRecording = async (recording: Recording) => {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-    // Only offer .mp4 if it's truly mp4, else fallback to .webm
     let fileName = `${recording.name.replace(/[^a-zA-Z0-9]/g, '_')}.${recording.format}`;
     if (recording.format === "mp4" && !trueMp4Supported()) {
       fileName = `${recording.name.replace(/[^a-zA-Z0-9]/g, '_')}.webm`;
@@ -388,7 +387,6 @@ const ScreenRecorder = () => {
     }
 
     try {
-      // Added block: Check Blob content for debugging
       const response = await fetch(recording.url);
       const blob = await response.blob();
       console.log("DOWNLOAD: Blob size:", blob.size, "type:", blob.type, "expected format:", recording.format);
@@ -401,33 +399,46 @@ const ScreenRecorder = () => {
       }
 
       if (isMobile) {
-        // Mobile-friendly download workaround using File and anchor
+        const arrayBuffer = await blob.arrayBuffer();
+        const fileType = blob.type || (recording.format === "mp4" ? "video/mp4" : "video/webm");
+        const file = new File([arrayBuffer], fileName, { type: fileType });
+        // Try using Web Share API if available (best for WhatsApp mobile)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: fileName,
+              text: "Screen recording video",
+            });
+            toast.success("Share sheet opened! You can now send your video via WhatsApp or save it to your device.");
+            return;
+          } catch (err) {
+            console.error("Web Share error:", err);
+            // fallback to download below
+          }
+        }
+        // Fallback to anchor File download
         try {
-          // Force use of File for name
-          const arrayBuffer = await blob.arrayBuffer();
-          const file = new File([arrayBuffer], fileName, { type: blob.type || 'video/mp4' });
           const tempUrl = URL.createObjectURL(file);
           const a = document.createElement("a");
           a.href = tempUrl;
           a.download = fileName;
           a.target = "_blank";
-
           document.body.appendChild(a);
           a.click();
-
           setTimeout(() => {
             document.body.removeChild(a);
             URL.revokeObjectURL(tempUrl);
           }, 1500);
-
           toast.success("Video downloaded! You can now share it on WhatsApp from your gallery/downloads.");
         } catch (error) {
-          console.error('Mobile download, File workaround error:', error);
+          console.error('Mobile anchor File download fallback error:', error);
+          // As a last resort, open in new tab
           window.open(recording.url, '_blank');
           toast.info("Video opened in new tab. Save it and share on WhatsApp from your gallery.");
         }
       } else {
-        // Desktop download, unchanged
+        // Desktop download: unchanged
         const a = document.createElement('a');
         a.href = recording.url;
         a.download = fileName;
