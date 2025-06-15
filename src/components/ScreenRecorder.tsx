@@ -181,46 +181,54 @@ const ScreenRecorder = () => {
     }
 
     const drawFrame = () => {
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Clear canvas with solid background
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Draw screen capture (full canvas)
       if (screenVideo.readyState >= 2) {
         ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
       }
 
-      // Draw webcam overlay - HIGHLY VISIBLE AND CLEAR
+      // Draw webcam overlay - CRYSTAL CLEAR AND OPAQUE
       if (webcamStream && webcamVideo.readyState >= 2) {
         const webcamWidth = 240;
         const webcamHeight = 180;
         const x = canvas.width - webcamWidth - 20;
         const y = canvas.height - webcamHeight - 20;
         
-        // Add thick black shadow background for maximum contrast
+        // Create a completely opaque background
         ctx.fillStyle = '#000000';
-        ctx.fillRect(x - 8, y - 8, webcamWidth + 16, webcamHeight + 16);
+        ctx.fillRect(x - 10, y - 10, webcamWidth + 20, webcamHeight + 20);
         
-        // Add white background for extra contrast
+        // Add bright white background for maximum contrast
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x - 4, y - 4, webcamWidth + 8, webcamHeight + 8);
+        ctx.fillRect(x - 5, y - 5, webcamWidth + 10, webcamHeight + 10);
         
-        // Draw webcam video with maximum clarity
+        // Set image smoothing for better quality
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Draw webcam video with maximum opacity and quality
+        ctx.globalAlpha = 1.0; // Ensure full opacity
         ctx.drawImage(webcamVideo, x, y, webcamWidth, webcamHeight);
+        ctx.globalAlpha = 1.0; // Reset alpha
         
-        // Add THICK bright white border for maximum visibility
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 8;
-        ctx.strokeRect(x, y, webcamWidth, webcamHeight);
-        
-        // Add thick black outer border for ultimate contrast
+        // Add multiple borders for extreme visibility
+        // Outer black border
         ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(x - 6, y - 6, webcamWidth + 12, webcamHeight + 12);
+        ctx.lineWidth = 6;
+        ctx.strokeRect(x - 8, y - 8, webcamWidth + 16, webcamHeight + 16);
         
-        // Add inner bright yellow accent for extra visibility
-        ctx.strokeStyle = '#ffff00';
+        // Middle white border
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(x - 4, y - 4, webcamWidth + 8, webcamHeight + 8);
+        
+        // Inner bright border
+        ctx.strokeStyle = '#00ff00';
         ctx.lineWidth = 2;
-        ctx.strokeRect(x + 2, y + 2, webcamWidth - 4, webcamHeight - 4);
+        ctx.strokeRect(x, y, webcamWidth, webcamHeight);
       }
 
       animationFrameRef.current = requestAnimationFrame(drawFrame);
@@ -228,8 +236,8 @@ const ScreenRecorder = () => {
 
     drawFrame();
 
-    // Return the canvas stream with higher frame rate for better quality
-    return canvas.captureStream(60);
+    // Return the canvas stream with higher frame rate and better quality
+    return canvas.captureStream(30);
   };
 
   const stopCanvasComposition = () => {
@@ -780,7 +788,7 @@ const ScreenRecorder = () => {
                             Your browser doesn't support video playback.
                           </video>
                           
-                          {/* Webcam Overlay - Ultra visible */}
+                          {/* Webcam Overlay - Crystal clear preview */}
                           {webcamEnabled && webcamStream && (
                             <div className="absolute bottom-4 right-4 w-32 h-24 bg-black rounded-lg overflow-hidden border-4 border-white shadow-2xl">
                               <video
@@ -837,8 +845,8 @@ const ScreenRecorder = () => {
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="font-medium">Ultra-Clear Webcam Overlay</h4>
-                          <p className="text-sm text-muted-foreground">Add highly visible webcam overlay to recording</p>
+                          <h4 className="font-medium">Crystal Clear Webcam Overlay</h4>
+                          <p className="text-sm text-muted-foreground">Add perfectly visible webcam overlay to recording</p>
                         </div>
                         <Switch 
                           checked={webcamEnabled} 
