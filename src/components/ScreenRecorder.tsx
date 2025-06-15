@@ -27,7 +27,8 @@ const ScreenRecorder = () => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
-  const [selectedFormat, setSelectedFormat] = useState('mp4-h264'); // Default to MP4 for better compatibility
+  // Set default format to WebM VP9, since MP4 is removed
+  const [selectedFormat, setSelectedFormat] = useState('webm-vp9'); // Default now webm-vp9
   const [includeAudio, setIncludeAudio] = useState(true);
   const [quality, setQuality] = useState('high');
   const [webcamEnabled, setWebcamEnabled] = useState(false);
@@ -90,14 +91,7 @@ const ScreenRecorder = () => {
     return 'video/mp4';
   };
 
-  const trueMp4Supported = () => {
-    if (typeof window !== "undefined" && "MediaRecorder" in window) {
-      return MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') ||
-        MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E"') ||
-        MediaRecorder.isTypeSupported('video/mp4');
-    }
-    return false;
-  };
+  const trueMp4Supported = () => false; // Always false - MP4 not recording any more
 
   const startWebcam = async () => {
     try {
@@ -146,40 +140,20 @@ const ScreenRecorder = () => {
                          formatOption.value.includes('mp3') || 
                          formatOption.value.includes('ogg');
       
-      let useMp4 = formatOption.value === 'mp4-h264' && trueMp4Supported();
-      let constraints: any;
-      if (useMp4) {
-        constraints = {
-          video: { 
-            displaySurface: "monitor",
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            frameRate: { ideal: 30, max: 30 }
-          },
-          audio: includeAudio ? {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 44100,
-            channelCount: 2
-          } : false,
-        };
-      } else {
-        // fallback to webm
-        constraints = {
-          video: !isAudioOnly ? { 
-            displaySurface: "monitor",
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            frameRate: { ideal: 30, max: 30 }
-          } : false,
-          audio: includeAudio ? {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 44100,
-            channelCount: 2
-          } : false,
-        };
-      }
+      let constraints: any = {
+        video: !isAudioOnly ? {
+          displaySurface: "monitor",
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 30 }
+        } : false,
+        audio: includeAudio ? {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+          channelCount: 2
+        } : false,
+      };
 
       const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
       setStream(displayStream);
@@ -189,21 +163,18 @@ const ScreenRecorder = () => {
         liveVideoRef.current.play().catch(e => console.log('Live preview play error:', e));
       }
 
-      // choose proper mimeType/check fallback
+      // Always use WebM or fallback
       let mimeType = "";
-      if (useMp4) {
-        mimeType = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
-      } else if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
+      if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
         mimeType = 'video/webm; codecs=vp9';
       } else if (MediaRecorder.isTypeSupported('video/webm; codecs=vp8')) {
         mimeType = 'video/webm; codecs=vp8';
       } else {
         mimeType = 'video/webm';
       }
-
-      // If MP4 selected but browser doesn't support, show toast warning
-      if (formatOption.value === "mp4-h264" && !trueMp4Supported()) {
-        toast.error("Your browser does not support MP4/H.264 encoding for screen recording. Recording will be saved in WebM format. This may NOT work with WhatsApp.");
+      // Warn if someone expected MP4
+      if (formatOption.value === "mp4-h264") {
+        toast.error("MP4 direct recording is no longer available. Record in WebM and then convert.");
       }
 
       const recorderOptions: MediaRecorderOptions = {
@@ -247,7 +218,7 @@ const ScreenRecorder = () => {
 
       recorder.start(1000); // Use 1 second chunks for better stability
       setRecording(true);
-      toast.success(`Recording started in ${useMp4 ? 'MP4' : 'WebM'} format`);
+      toast.success("Recording started in WebM format");
       
     } catch (err) {
       console.error("Error starting screen recording:", err);

@@ -23,19 +23,9 @@ interface FormatSettingsProps {
   disabled?: boolean;
 }
 
-// Helper to detect MP4 support
-const isMp4Supported = () => {
-  if (typeof window !== "undefined" && "MediaRecorder" in window) {
-    // Safari's implementation sometimes supports H.264 (not always); in most browsers it's false
-    return MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') ||
-      MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E"') ||
-      MediaRecorder.isTypeSupported('video/mp4');
-  }
-  return false;
-};
-
+// No MP4 in selectable formats:
 const rawFormatOptions: FormatOption[] = [
-  { value: 'mp4-h264', label: 'MP4 (H.264) - Recommended for WhatsApp', mimeType: 'video/mp4', extension: 'mp4', quality: 'high' },
+  // MP4 entry removed here as requested!
   { value: 'webm-vp9', label: 'WebM (VP9)', mimeType: 'video/webm; codecs=vp9', extension: 'webm', quality: 'high' },
   { value: 'webm-vp8', label: 'WebM (VP8)', mimeType: 'video/webm; codecs=vp8', extension: 'webm', quality: 'medium' },
   { value: 'mkv', label: 'MKV', mimeType: 'video/x-matroska', extension: 'mkv', quality: 'high' },
@@ -62,30 +52,15 @@ const FormatSettings = ({
   onQualityChange,
   disabled = false
 }: FormatSettingsProps) => {
-  const [mp4Supported, setMp4Supported] = useState(false);
+  // No need to check for MP4 support anymore
+  const [mp4Supported] = useState(false);
 
-  useEffect(() => {
-    setMp4Supported(isMp4Supported());
-  }, []);
-
-  // Filter/disable unavailable formats
-  const formatOptions: FormatOption[] = rawFormatOptions.map(option => {
-    if (option.value === "mp4-h264") {
-      return { ...option, disabled: !mp4Supported };
-    }
-    return option;
-  });
+  const formatOptions: FormatOption[] = rawFormatOptions;
 
   const selectedFormatOption = formatOptions.find(f => f.value === selectedFormat);
   const isAudioOnly = selectedFormatOption?.value.includes('wav') ||
     selectedFormatOption?.value.includes('mp3') ||
     selectedFormatOption?.value.includes('ogg');
-
-  // If MP4 not supported, show a warning in the UI
-  const mp4Warning =
-    selectedFormat === "mp4-h264" && !mp4Supported
-      ? "⚠️ Your browser does not support MP4 recording. The file may not be compatible with WhatsApp. Use a supported browser or select WebM (VP8/VP9)."
-      : "";
 
   return (
     <Card className="w-full max-w-md">
@@ -105,7 +80,7 @@ const FormatSettings = ({
             <SelectContent>
               <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Video Formats</div>
               {formatOptions.filter(f => !f.value.includes('wav') && !f.value.includes('mp3') && !f.value.includes('ogg')).map((option) => (
-                <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                <SelectItem key={option.value} value={option.value}>
                   <div className="flex justify-between items-center w-full">
                     <span>{option.label}</span>
                     <span className="text-xs text-muted-foreground ml-2">{option.extension.toUpperCase()}</span>
@@ -124,13 +99,8 @@ const FormatSettings = ({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground mt-1">
-            💡 MP4 format is <strong>only available if your browser supports it</strong>. Recommended for WhatsApp if available.
+            MP4 recording is no longer available due to compatibility issues. Please record in WebM, then use the "Convert to MP4" button after recording, if needed.
           </p>
-          {mp4Warning && (
-            <div className="mt-2 px-2 py-1 rounded bg-yellow-100 text-yellow-800 text-xs">
-              {mp4Warning}
-            </div>
-          )}
         </div>
 
         {/* Quality Selection - Only for video formats */}
@@ -175,11 +145,8 @@ const FormatSettings = ({
             <strong>Selected:</strong> {selectedFormatOption.label}<br />
             <strong>Extension:</strong> .{selectedFormatOption.extension}<br />
             {!isAudioOnly && <><strong>Quality:</strong> {qualityOptions.find(q => q.value === quality)?.label}</>}
-            {selectedFormatOption.value === 'mp4-h264' && mp4Supported && (
-              <div className="text-green-600 font-medium mt-1">✓ WhatsApp Compatible</div>
-            )}
-            {selectedFormatOption.value === 'mp4-h264' && !mp4Supported && (
-              <div className="text-yellow-800 font-medium mt-1">⚠️ Not supported in this browser</div>
+            {selectedFormatOption.value === 'mp4-h264' && (
+              <div className="text-red-600 font-medium mt-1">MP4 removed due to persistent metadata issues. Please use WebM and convert after recording.</div>
             )}
           </div>
         )}
@@ -190,3 +157,4 @@ const FormatSettings = ({
 
 export { rawFormatOptions as formatOptions };
 export default FormatSettings;
+
