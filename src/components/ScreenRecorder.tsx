@@ -27,8 +27,8 @@ const ScreenRecorder = () => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
-  // Set default format to WebM VP9, since MP4 is removed
-  const [selectedFormat, setSelectedFormat] = useState('webm-vp9'); // Default now webm-vp9
+  // Set default format to WhatsApp-friendly WebM
+  const [selectedFormat, setSelectedFormat] = useState('webm-generic');
   const [includeAudio, setIncludeAudio] = useState(true);
   const [quality, setQuality] = useState('high');
   const [webcamEnabled, setWebcamEnabled] = useState(false);

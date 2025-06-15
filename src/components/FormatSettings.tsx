@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +25,7 @@ interface FormatSettingsProps {
 // MP4 added back as a selectable format
 const rawFormatOptions: FormatOption[] = [
   { value: 'mp4-h264', label: 'MP4 (H.264)', mimeType: 'video/mp4', extension: 'mp4', quality: 'high' },
+  { value: 'webm-generic', label: 'WebM (WhatsApp, File Safe)', mimeType: 'video/webm', extension: 'webm', quality: 'high' },
   { value: 'webm-vp9', label: 'WebM (VP9)', mimeType: 'video/webm; codecs=vp9', extension: 'webm', quality: 'high' },
   { value: 'webm-vp8', label: 'WebM (VP8)', mimeType: 'video/webm; codecs=vp8', extension: 'webm', quality: 'medium' },
   { value: 'mkv', label: 'MKV', mimeType: 'video/x-matroska', extension: 'mkv', quality: 'high' },
@@ -88,7 +88,9 @@ const FormatSettings = ({
             </SelectTrigger>
             <SelectContent>
               <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Video Formats</div>
-              {formatOptions.filter(f => !f.value.includes('wav') && !f.value.includes('mp3') && !f.value.includes('ogg')).map((option) => (
+              {formatOptions
+                .filter(f => !f.value.includes('wav') && !f.value.includes('mp3') && !f.value.includes('ogg'))
+                .map((option) => (
                 <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
                   <div className="flex justify-between items-center w-full">
                     <span>
@@ -96,7 +98,7 @@ const FormatSettings = ({
                       {option.value === 'mp4-h264' && mp4Supported && (
                         <span className="ml-2 text-xs text-primary">[Recommended for LinkedIn]</span>
                       )}
-                      {option.value === 'webm-vp9' && (
+                      {option.value === 'webm-generic' && (
                         <span className="ml-2 text-xs text-primary">[Recommended for WhatsApp]</span>
                       )}
                     </span>
@@ -126,7 +128,7 @@ const FormatSettings = ({
             </span>
             <br />
             <span>
-              <b>WebM</b> is recommended for <b>WhatsApp</b> uploads and works on the broadest number of browsers/devices.
+              <b>WebM (WhatsApp, File Safe)</b> is recommended for <b>WhatsApp</b> uploads and works on most browsers and devices.
             </span>
             <br />
             If your browser does not support direct MP4 recording, pick WebM and use the "Convert to MP4" button after recording for LinkedIn compatibility.
@@ -178,7 +180,7 @@ const FormatSettings = ({
                 <span className="text-xs text-muted-foreground">Some browsers (e.g. Firefox, Safari) do not support direct MP4 recording.</span>
               </div>
             )}
-            {selectedFormatOption.value === 'webm-vp9' && (
+            {selectedFormatOption.value === 'webm-generic' && (
               <div className="text-primary font-medium mt-1">
                 This is safest for WhatsApp.
               </div>
